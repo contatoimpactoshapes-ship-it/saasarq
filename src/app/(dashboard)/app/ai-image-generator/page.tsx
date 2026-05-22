@@ -7,8 +7,9 @@ import {
   Upload, X, Plus, Image as ImageIcon,
   Loader2, AlertCircle, Download, ArrowRight, ChevronDown,
   ZoomIn, ZoomOut, RotateCcw, GripVertical, RefreshCw, Cpu,
-  MousePointerClick, Hand, MousePointer, Trash2,
+  MousePointerClick, Hand, MousePointer, Trash2, Paintbrush,
 } from "lucide-react";
+import { ImageEditor } from "@/components/tools/ImageEditor";
 import { TopBar } from "@/components/layout/TopBar";
 import { GeneratorPanel } from "@/components/tools/GeneratorPanel";
 import { GalleryPanel } from "@/components/tools/GalleryPanel";
@@ -90,6 +91,7 @@ function AIImageGeneratorInner() {
   // ── UI state ─────────────────────────────────────────────────
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [lightboxUrl, setLightboxUrl]     = useState<string | null>(null);
+  const [editorUrl, setEditorUrl]         = useState<string | null>(null);
   const [zoom, setZoom]                   = useState(1);
 
   // ── Node drag state (select tool) ────────────────────────────
@@ -1052,6 +1054,14 @@ function AIImageGeneratorInner() {
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
                                 <div className="absolute top-2 left-2 bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">Concluído</div>
                                 <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {/* Edit (inpaint) */}
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setEditorUrl(gen.outputUrls[0]); }}
+                                    title="Editar imagem"
+                                    className="w-7 h-7 bg-white/90 backdrop-blur-sm rounded-lg flex items-center justify-center shadow-sm hover:bg-[var(--color-brand)]/10 transition-colors"
+                                  >
+                                    <Paintbrush className="w-3 h-3 text-[var(--color-brand)]" />
+                                  </button>
                                   {render.falUrl && (
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleRerender(render); }}
@@ -1177,8 +1187,16 @@ function AIImageGeneratorInner() {
         onChange={(e) => { handleFileSelect(e.target.files); if (fileInputRef.current) fileInputRef.current.value = ""; }}
       />
 
+      {/* Image Editor (inpainting) */}
+      {editorUrl && (
+        <ImageEditor
+          imageUrl={editorUrl}
+          onClose={() => setEditorUrl(null)}
+        />
+      )}
+
       {/* Lightbox */}
-      {lightboxUrl && (
+      {lightboxUrl && !editorUrl && (
         <div className="fixed inset-0 z-50 bg-black/92 flex items-center justify-center" onClick={() => setLightboxUrl(null)}>
           <div className="relative max-w-5xl max-h-[90vh] mx-4" onClick={(e) => e.stopPropagation()}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
