@@ -19,7 +19,12 @@ export async function GET() {
     const generations = await prisma.generation.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
-      take: 50,
+      take: 200,
+      select: {
+        id: true, tool: true, model: true, prompt: true,
+        status: true, outputUrls: true, creditsCost: true,
+        errorMessage: true, createdAt: true, projectId: true,
+      },
     });
 
     return NextResponse.json(generations);
