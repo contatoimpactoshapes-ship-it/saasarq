@@ -22,6 +22,7 @@ interface GenerationState {
 
   addGeneration: (g: GenerationItem) => void;
   updateGeneration: (id: string, data: Partial<GenerationItem>) => void;
+  removeGeneration: (id: string) => void;
   setIsGenerating: (v: boolean) => void;
   setCurrentId: (id: string | null) => void;
   setPollingRef: (ref: ReturnType<typeof setInterval> | null) => void;
@@ -44,6 +45,9 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         g.id === id ? { ...g, ...data } : g
       ),
     })),
+
+  removeGeneration: (id) =>
+    set((s) => ({ generations: s.generations.filter((g) => g.id !== id) })),
 
   setIsGenerating: (isGenerating) => set({ isGenerating }),
   setCurrentId: (currentId) => set({ currentId }),
