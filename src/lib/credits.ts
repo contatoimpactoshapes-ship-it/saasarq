@@ -102,7 +102,7 @@ export async function getOrCreateUser(clerkId: string, email: string) {
       clerkId,
       email,
       plan: isAdmin ? "PRO" : "FREE",
-      credits: isAdmin ? 999999 : 400,
+      credits: isAdmin ? 999999 : 20000,
       isAdmin,
     },
   });
