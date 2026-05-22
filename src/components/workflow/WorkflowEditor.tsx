@@ -10,50 +10,45 @@ import {
   useNodesState, useEdgesState, addEdge,
   NodeTypes, Node, Edge, Connection, ReactFlowProvider,
   useReactFlow, Panel,
-  SelectionMode,
-  MarkerType,
+  SelectionMode, MarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { toast } from "sonner";
-import { FolderOpen } from "lucide-react";
+import { ImageIcon } from "lucide-react";
 
-import { SourceNode, SourceNodeData } from "./nodes/SourceNode";
-import { RenderNode, RenderNodeData, RenderStatus } from "./nodes/RenderNode";
+import { ImageNode, ImageNodeData, NodeStatus } from "./nodes/ImageNode";
 import { ContextMenu, ContextMenuState } from "./ContextMenu";
 import { WorkflowSidebar } from "./WorkflowSidebar";
 import { useGenerationStore } from "@/stores/useGenerationStore";
 import { useCreditsStore } from "@/stores/useCreditsStore";
 import { ImageEditor } from "@/components/tools/ImageEditor";
 
-// ── Constants ────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const POLL_INTERVAL  = 2000;
 const RENDER_CREDITS = 120;
 const SOURCE_X       = 80;
 const RENDER_X       = 400;
-const NODE_STEP_Y    = 280;
+const NODE_STEP_Y    = 260;
 
-// ── Node type registry ────────────────────────────────────────────────────────
+// ── Node type registry (single unified type) ──────────────────────────────────
 
-const nodeTypes: NodeTypes = {
-  sourceNode: SourceNode,
-  renderNode: RenderNode,
-};
+const nodeTypes: NodeTypes = { imageNode: ImageNode };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeEdge(sourceId: string, targetId: string): Edge {
   return {
-    id: `e-${sourceId}-${targetId}`,
-    source: sourceId,
+    id:           `e-${sourceId}-${targetId}`,
+    source:       sourceId,
     sourceHandle: "output",
-    target: targetId,
+    target:       targetId,
     targetHandle: "input",
-    type: "smoothstep",
-    animated: true,
-    style: { stroke: "#7c3aed", strokeWidth: 2, opacity: 0.7 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "#7c3aed", width: 16, height: 16 },
+    type:         "default",          // ← bezier, more organic curve
+    animated:     true,
+    style:        { stroke: "#F97316", strokeWidth: 2, opacity: 0.8 },
+    markerEnd:    { type: MarkerType.ArrowClosed, color: "#F97316", width: 14, height: 14 },
   };
 }
 
@@ -62,36 +57,32 @@ function downloadUrl(url: string, filename = "render.png") {
   a.href = url; a.download = filename; a.click();
 }
 
-// ── Inner component (needs ReactFlowProvider context) ──────────────────────
+// ── Inner component ───────────────────────────────────────────────────────────
 
 function WorkflowEditorInner() {
   const { fitView } = useReactFlow();
 
-  // ── Stores ─────────────────────────────────────────────────────────────
   const { addGeneration, updateGeneration } = useGenerationStore();
-  const { credits, decrementCredits, refreshCredits }        = useCreditsStore();
+  const { credits, decrementCredits, refreshCredits } = useCreditsStore();
 
-  // ── Nodes / Edges ───────────────────────────────────────────────────────
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  // ── Sidebar state ───────────────────────────────────────────────────────
-  const [globalPrompt,  setGlobalPrompt]  = useState("");
-  const [renderModel,   setRenderModel]   = useState("render-flux-dev");
-  const [strength,      setStrength]      = useState(0.82);
-  const [numOutputs,    setNumOutputs]    = useState(1);
+  const [globalPrompt, setGlobalPrompt] = useState("");
+  const [renderModel,  setRenderModel]  = useState("render-flux-dev");
+  const [strength,     setStrength]     = useState(0.82);
+  const [numOutputs,   setNumOutputs]   = useState(1);
 
-  // ── UI state ────────────────────────────────────────────────────────────
-  const [isGenerating,  setIsGenerating]  = useState(false);
-  const [contextMenu,   setContextMenu]   = useState<ContextMenuState | null>(null);
-  const [lightboxUrl,   setLightboxUrl]   = useState<string | null>(null);
-  const [editorUrl,     setEditorUrl]     = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [contextMenu,  setContextMenu]  = useState<ContextMenuState | null>(null);
+  const [lightboxUrl,  setLightboxUrl]  = useState<string | null>(null);
+  const [editorUrl,    setEditorUrl]    = useState<string | null>(null);
 
-  // ── File input ref ──────────────────────────────────────────────────────
-  const fileRef   = useRef<HTMLInputElement>(null);
+  const fileRef    = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
 
-  // ── Stop a specific polling interval ────────────────────────────────────
+  // ── Polling ────────────────────────────────────────────────────────────────
+
   const stopPoll = useCallback((genId: string) => {
     const iv = pollingRef.current.get(genId);
     if (iv) { clearInterval(iv); pollingRef.current.delete(genId); }
@@ -99,8 +90,7 @@ function WorkflowEditorInner() {
 
   useEffect(() => () => pollingRef.current.forEach((iv) => clearInterval(iv)), []);
 
-  // ── Start polling for a render node ────────────────────────────────────
-  const startPoll = useCallback((genId: string, renderNodeId: string) => {
+  const startPoll = useCallback((genId: string, nodeId: string) => {
     const iv = setInterval(async () => {
       try {
         const res  = await fetch(`/api/generate/${genId}/status`);
@@ -111,38 +101,31 @@ function WorkflowEditorInner() {
           stopPoll(genId);
           const url = data.outputUrls?.[0] ?? "";
           updateGeneration(genId, { status: "COMPLETED", outputUrls: data.outputUrls ?? [] });
-
           setNodes((ns) => ns.map((n) => {
-            if (n.id !== renderNodeId) return n;
-            const d = n.data as unknown as RenderNodeData;
-            return {
-              ...n,
-              data: { ...d, status: "completed" as RenderStatus, imageUrl: url },
-            };
+            if (n.id !== nodeId) return n;
+            const d = n.data as unknown as ImageNodeData;
+            return { ...n, data: { ...d, status: "completed" as NodeStatus, imageUrl: url } };
           }));
           refreshCredits();
-          // Check if all render nodes are done
           setIsGenerating(false);
+          toast.success("Render concluído!");
         } else if (data.status === "FAILED") {
           stopPoll(genId);
           updateGeneration(genId, { status: "FAILED", errorMessage: data.error });
           setNodes((ns) => ns.map((n) => {
-            if (n.id !== renderNodeId) return n;
-            const d = n.data as unknown as RenderNodeData;
-            return {
-              ...n,
-              data: { ...d, status: "failed" as RenderStatus, errorMessage: data.error },
-            };
+            if (n.id !== nodeId) return n;
+            const d = n.data as unknown as ImageNodeData;
+            return { ...n, data: { ...d, status: "failed" as NodeStatus, errorMessage: data.error } };
           }));
           refreshCredits();
           setIsGenerating(false);
           toast.error(data.error ?? "Falha na geração. Créditos reembolsados.");
         } else {
           setNodes((ns) => ns.map((n) => {
-            if (n.id !== renderNodeId) return n;
-            const d = n.data as unknown as RenderNodeData;
+            if (n.id !== nodeId) return n;
+            const d = n.data as unknown as ImageNodeData;
             if (d.status === "processing") return n;
-            return { ...n, data: { ...d, status: "processing" as RenderStatus } };
+            return { ...n, data: { ...d, status: "processing" as NodeStatus } };
           }));
         }
       } catch { /* keep polling */ }
@@ -150,11 +133,94 @@ function WorkflowEditorInner() {
     pollingRef.current.set(genId, iv);
   }, [stopPoll, updateGeneration, refreshCredits, setNodes]);
 
-  // ── Execute render for a specific source node ───────────────────────────
+  // ── Node data builders ────────────────────────────────────────────────────
+
+  function buildRenderData(
+    nodeId: string,
+    sourceNodeId: string,
+    partial: Partial<ImageNodeData>,
+  ): ImageNodeData {
+    return {
+      nodeKind:  "render",
+      status:    "pending",
+      ...partial,
+      onDelete:   () => {
+        setNodes((ns) => ns.filter((n) => n.id !== nodeId));
+        setEdges((es) => es.filter((e) => e.source !== nodeId && e.target !== nodeId));
+      },
+      onEdit:     () => {
+        const url = partial.imageUrl;
+        if (url) setEditorUrl(url);
+        else toast.info("Imagem ainda não gerada.");
+      },
+      onDownload: () => { if (partial.imageUrl) downloadUrl(partial.imageUrl); },
+      onDuplicate: () => {
+        setNodes((ns) => {
+          const orig = ns.find((n) => n.id === nodeId);
+          if (!orig) return ns;
+          const d    = orig.data as unknown as ImageNodeData;
+          const nid  = `rn-dup-${Date.now()}`;
+          return [...ns, {
+            ...orig,
+            id: nid, selected: false,
+            position: { x: orig.position.x + 20, y: orig.position.y + 20 },
+            data: buildRenderData(nid, sourceNodeId, d),
+          }];
+        });
+      },
+      onPreview:  () => { const url = partial.imageUrl; if (url) setLightboxUrl(url); },
+      onRender:   () => executeRender(sourceNodeId),
+      onMoveToFolder: () => toast.info("Em breve: mover para pasta"),
+      onFindSimilar:  () => toast.info("Em breve: similares"),
+      onHistory:      () => toast.info("Em breve: histórico"),
+    };
+  }
+
+  function buildSourceData(nodeId: string, partial: Partial<ImageNodeData>): ImageNodeData {
+    return {
+      nodeKind: "source",
+      status:   partial.uploading ? "pending" : partial.falUrl ? "ready" : "pending",
+      label:    "imagem",
+      ...partial,
+      onDelete: () => {
+        setNodes((ns) => ns.filter((n) => n.id !== nodeId));
+        setEdges((es) => es.filter((e) => e.source !== nodeId && e.target !== nodeId));
+      },
+      onEdit: () => {
+        const url = partial.previewUrl;
+        if (url) setEditorUrl(url);
+      },
+      onDownload: () => { if (partial.previewUrl) downloadUrl(partial.previewUrl, partial.label ?? "imagem"); },
+      onDuplicate: () => {
+        setNodes((ns) => {
+          const orig = ns.find((n) => n.id === nodeId);
+          if (!orig) return ns;
+          const d    = orig.data as unknown as ImageNodeData;
+          const nid  = `sn-dup-${Date.now()}`;
+          return [...ns, {
+            ...orig,
+            id: nid, selected: false,
+            position: { x: orig.position.x + 20, y: orig.position.y + 20 },
+            data: buildSourceData(nid, d),
+          }];
+        });
+      },
+      onPreview:  () => { if (partial.previewUrl) setLightboxUrl(partial.previewUrl); },
+      onRender:   () => executeRender(nodeId),
+      onReplace:  () => fileRef.current?.click(),
+      onMoveToFolder: () => toast.info("Em breve: mover para pasta"),
+      onFindSimilar:  () => toast.info("Em breve: similares"),
+      onHistory:      () => toast.info("Em breve: histórico"),
+    };
+  }
+
+  // ── Execute render ────────────────────────────────────────────────────────
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const executeRender = useCallback(async (sourceNodeId: string) => {
     const sourceNode = nodes.find((n) => n.id === sourceNodeId);
     if (!sourceNode) return;
-    const sd = sourceNode.data as SourceNodeData;
+    const sd = sourceNode.data as unknown as ImageNodeData;
     if (!sd.falUrl || sd.uploading) {
       toast.error("Imagem ainda sendo enviada...");
       return;
@@ -169,71 +235,67 @@ function WorkflowEditorInner() {
     setIsGenerating(true);
     decrementCredits(cost);
 
+    const existingRenderCount = edges.filter((e) => e.source === sourceNodeId).length;
+
     for (let i = 0; i < numOutputs; i++) {
       const renderNodeId = `rn-${Date.now()}-${sourceNodeId}-${i}`;
-      const optId = `opt-${Date.now()}-${i}`;
+      const optId        = `opt-${Date.now()}-${i}`;
 
-      // Create render node in the graph
-      const yOffset = (edges.filter((e) => e.source === sourceNodeId).length) * NODE_STEP_Y;
+      // Position: stack to the right, offset vertically
+      const col = Math.floor(i / 4);
+      const row = existingRenderCount + i;
 
-      // We create stable callbacks using closure over renderNodeId
-      const nodeToAdd: Node = {
-        id:       renderNodeId,
-        type:     "renderNode",
+      const newNode: Node = {
+        id:   renderNodeId,
+        type: "imageNode",
         position: {
-          x: RENDER_X + Math.floor(i / 2) * 220,
-          y: (sourceNode.position.y) + (i % 2) * NODE_STEP_Y + yOffset,
+          x: RENDER_X + col * 240,
+          y: sourceNode.position.y + (row % 4) * NODE_STEP_Y,
         },
-        data: buildRenderNodeData(
-          renderNodeId, "pending", undefined,
-          globalPrompt || sd.label,
-          renderModel,
-          undefined,
-          sd.label,
-        ),
+        data: buildRenderData(renderNodeId, sourceNodeId, {
+          status:  "pending",
+          prompt:  globalPrompt || sd.label,
+          label:   `Variação ${existingRenderCount + i + 1}`,
+        }),
       };
 
-      setNodes((ns) => [...ns, nodeToAdd]);
+      setNodes((ns) => [...ns, newNode]);
       setEdges((es) => [...es, makeEdge(sourceNodeId, renderNodeId)]);
 
       addGeneration({
         id: optId, tool: "IMAGE_EDIT", model: renderModel,
-        prompt: globalPrompt || sd.label,
+        prompt: globalPrompt || (sd.label ?? ""),
         status: "PENDING", outputUrls: [], creditsCost: RENDER_CREDITS,
         createdAt: new Date().toISOString(),
       });
 
       try {
         const res    = await fetch("/api/generate/render", {
-          method:  "POST",
+          method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            imageUrl:    sd.falUrl,
-            prompt:      globalPrompt || sd.label,
-            style:       "custom",
-            strength,
-            renderModel,
+            imageUrl: sd.falUrl,
+            prompt:   globalPrompt || sd.label,
+            style:    "custom",
+            strength, renderModel,
           }),
         });
         const result = await res.json();
         if (!res.ok) throw new Error(result.error ?? "Erro ao renderizar");
 
         updateGeneration(optId, { id: result.generationId, status: "PROCESSING" });
-
-        // Update render node to processing
         setNodes((ns) => ns.map((n) => {
           if (n.id !== renderNodeId) return n;
-          const d = n.data as unknown as RenderNodeData;
-          return { ...n, data: { ...d, status: "processing" as RenderStatus } };
+          const d = n.data as unknown as ImageNodeData;
+          return { ...n, data: { ...d, status: "processing" as NodeStatus } };
         }));
-
         startPoll(result.generationId, renderNodeId);
       } catch (err) {
         updateGeneration(optId, { status: "FAILED" });
         setNodes((ns) => ns.map((n) => {
           if (n.id !== renderNodeId) return n;
-          const d = n.data as unknown as RenderNodeData;
-          return { ...n, data: { ...d, status: "failed" as RenderStatus } };
+          const d = n.data as unknown as ImageNodeData;
+          return { ...n, data: { ...d, status: "failed" as NodeStatus } };
         }));
         refreshCredits();
         setIsGenerating(false);
@@ -244,100 +306,26 @@ function WorkflowEditorInner() {
       decrementCredits, addGeneration, updateGeneration, refreshCredits,
       startPoll, setNodes, setEdges]);
 
-  // ── Render all ready source nodes ──────────────────────────────────────
+  // ── Render all ────────────────────────────────────────────────────────────
+
   const handleRenderAll = useCallback(async () => {
-    const sourcesReady = nodes.filter((n) => {
-      if (n.type !== "sourceNode") return false;
-      const d = n.data as unknown as SourceNodeData;
-      return d.falUrl && !d.uploading;
+    const ready = nodes.filter((n) => {
+      if (n.type !== "imageNode") return false;
+      const d = n.data as unknown as ImageNodeData;
+      return d.nodeKind === "source" && d.falUrl && !d.uploading;
     });
-    if (!sourcesReady.length) {
-      toast.info("Nenhuma imagem pronta para renderizar.");
-      return;
-    }
-    for (const src of sourcesReady) {
-      await executeRender(src.id);
-    }
+    if (!ready.length) { toast.info("Nenhuma imagem pronta para renderizar."); return; }
+    for (const src of ready) await executeRender(src.id);
   }, [nodes, executeRender]);
 
-  // ── Build stable node data using refs ──────────────────────────────────
-  // We use a factory function so callbacks are stable via node ID closure
-  function buildRenderNodeData(
-    nodeId: string,
-    status: RenderStatus,
-    imageUrl?: string,
-    prompt?: string,
-    model?: string,
-    errorMessage?: string,
-    sourceLabel?: string,
-  ): RenderNodeData {
-    return {
-      status, imageUrl, prompt, model, errorMessage, sourceLabel,
-      onDelete:    () => setNodes((ns) => ns.filter((n) => n.id !== nodeId)),
-      onEdit:      () => imageUrl && setEditorUrl(imageUrl),
-      onDownload:  () => imageUrl && downloadUrl(imageUrl),
-      onDuplicate: () => {
-        setNodes((ns) => {
-          const orig = ns.find((n) => n.id === nodeId);
-          if (!orig) return ns;
-          const d    = orig.data as unknown as RenderNodeData;
-          const newId = `rn-dup-${Date.now()}`;
-          return [...ns, {
-            ...orig,
-            id:       newId,
-            selected: false,
-            position: { x: orig.position.x + 20, y: orig.position.y + 20 },
-            data:     buildRenderNodeData(newId, d.status, d.imageUrl, d.prompt, d.model, d.errorMessage, d.sourceLabel),
-          }];
-        });
-      },
-      onPreview:   () => imageUrl && setLightboxUrl(imageUrl),
-      onZoomIn:    () => imageUrl && setLightboxUrl(imageUrl),
-      onRerender:  () => {
-        // Re-render means find parent source and re-execute
-        const parentEdge = edges.find((e) => e.target === nodeId);
-        if (parentEdge) executeRender(parentEdge.source);
-        else toast.info("Sem nó de origem conectado.");
-      },
-    };
-  }
+  // ── File upload ───────────────────────────────────────────────────────────
 
-  function buildSourceNodeData(nodeId: string, existing: Partial<SourceNodeData>): SourceNodeData {
-    return {
-      label:      existing.label ?? "render",
-      previewUrl: existing.previewUrl ?? "",
-      falUrl:     existing.falUrl,
-      uploading:  existing.uploading,
-      onDelete:   () => {
-        setNodes((ns) => ns.filter((n) => n.id !== nodeId));
-        setEdges((es) => es.filter((e) => e.source !== nodeId && e.target !== nodeId));
-      },
-      onReplace:  () => fileRef.current?.click(),
-      onRender:   () => executeRender(nodeId),
-      onDownload: () => existing.previewUrl && downloadUrl(existing.previewUrl, existing.label),
-      onDuplicate: () => {
-        setNodes((ns) => {
-          const orig = ns.find((n) => n.id === nodeId);
-          if (!orig) return ns;
-          const d    = orig.data as unknown as SourceNodeData;
-          const newId = `sn-dup-${Date.now()}`;
-          return [...ns, {
-            ...orig,
-            id:       newId,
-            selected: false,
-            position: { x: orig.position.x + 20, y: orig.position.y + 20 },
-            data:     buildSourceNodeData(newId, d),
-          }];
-        });
-      },
-      onPreview: () => existing.previewUrl && setLightboxUrl(existing.previewUrl),
-    };
-  }
-
-  // ── File upload ─────────────────────────────────────────────────────────
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files) return;
-    const existing = nodes.filter((n) => n.type === "sourceNode").length;
+    const existing = nodes.filter((n) => {
+      const d = n.data as unknown as ImageNodeData;
+      return d.nodeKind === "source";
+    }).length;
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -349,19 +337,15 @@ function WorkflowEditorInner() {
       const nodeId     = `sn-${Date.now()}-${i}`;
       const label      = file.name.replace(/\.[^/.]+$/, "");
 
-      const nodeData = buildSourceNodeData(nodeId, {
-        label, previewUrl, uploading: true,
-      });
-
       const newNode: Node = {
-        id:       nodeId,
-        type:     "sourceNode",
+        id:   nodeId,
+        type: "imageNode",
         position: { x: SOURCE_X, y: 48 + (existing + i) * NODE_STEP_Y },
-        data:     nodeData,
+        data: buildSourceData(nodeId, { label, previewUrl, uploading: true }),
       };
       setNodes((ns) => [...ns, newNode]);
 
-      // Upload to FAL
+      // Upload async
       (async () => {
         try {
           const fd = new FormData();
@@ -372,13 +356,14 @@ function WorkflowEditorInner() {
 
           setNodes((ns) => ns.map((n) => {
             if (n.id !== nodeId) return n;
-            const d = n.data as unknown as SourceNodeData;
+            const d = n.data as unknown as ImageNodeData;
             return {
               ...n,
               data: {
                 ...d,
                 falUrl:   data.url,
                 uploading: false,
+                status:    "ready" as NodeStatus,
                 onRender:  () => executeRender(nodeId),
               },
             };
@@ -391,34 +376,39 @@ function WorkflowEditorInner() {
     }
   }, [nodes, setNodes, executeRender]);
 
-  // ── Edge connection ──────────────────────────────────────────────────────
+  // ── Edge connection ───────────────────────────────────────────────────────
+
   const onConnect = useCallback((params: Connection) => {
     setEdges((es) => addEdge({
       ...params,
-      type: "smoothstep",
-      animated: true,
-      style: { stroke: "#7c3aed", strokeWidth: 2 },
-      markerEnd: { type: MarkerType.ArrowClosed, color: "#7c3aed" },
+      type:      "default",
+      animated:  true,
+      style:     { stroke: "#F97316", strokeWidth: 2 },
+      markerEnd: { type: MarkerType.ArrowClosed, color: "#F97316" },
     }, es));
   }, [setEdges]);
 
-  // ── Context menu ────────────────────────────────────────────────────────
+  // ── Context menu ──────────────────────────────────────────────────────────
+
   const onNodeContextMenu = useCallback((e: ReactMouseEvent, node: Node) => {
     e.preventDefault();
-    const d = node.data as unknown as (SourceNodeData | RenderNodeData);
-    const nodeType = node.type === "sourceNode" ? "source" : "render";
-    const nodeStatus = nodeType === "render" ? (d as RenderNodeData).status : undefined;
-    setContextMenu({ x: e.clientX, y: e.clientY, nodeId: node.id, nodeType, nodeStatus });
+    const d = node.data as unknown as ImageNodeData;
+    setContextMenu({
+      x: e.clientX, y: e.clientY,
+      nodeId:    node.id,
+      nodeKind:  d.nodeKind ?? "source",
+      nodeStatus: d.status,
+    });
   }, []);
 
   const onPaneClick = useCallback(() => setContextMenu(null), []);
 
-  // ── Keyboard shortcuts ───────────────────────────────────────────────────
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement)?.tagName;
-      const isTyping = tag === "INPUT" || tag === "TEXTAREA";
-      if (isTyping) return;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
 
       if (e.key === "Escape") { setContextMenu(null); setLightboxUrl(null); }
       if (e.key === "Delete" || e.key === "Backspace") {
@@ -436,7 +426,7 @@ function WorkflowEditorInner() {
           const clones: Node[] = selected.map((n) => ({
             ...n,
             id:       `${n.id}-dup-${Date.now()}`,
-            selected: true,
+            selected: false,
             position: { x: n.position.x + 20, y: n.position.y + 20 },
           }));
           return [...ns.map((n) => ({ ...n, selected: false })), ...clones];
@@ -451,7 +441,8 @@ function WorkflowEditorInner() {
     return () => window.removeEventListener("keydown", onKey);
   }, [fitView, setNodes, setEdges]);
 
-  // ── Context menu action handlers ────────────────────────────────────────
+  // ── Context menu handlers ─────────────────────────────────────────────────
+
   const ctxDelete = useCallback((id: string) => {
     setNodes((ns) => ns.filter((n) => n.id !== id));
     setEdges((es) => es.filter((e) => e.source !== id && e.target !== id));
@@ -461,37 +452,48 @@ function WorkflowEditorInner() {
     setNodes((ns) => {
       const orig = ns.find((n) => n.id === id);
       if (!orig) return ns;
-      const newId = `${id}-dup-${Date.now()}`;
-      return [...ns, { ...orig, id: newId, selected: false, position: { x: orig.position.x + 20, y: orig.position.y + 20 } }];
+      const nid = `${id}-dup-${Date.now()}`;
+      return [...ns, { ...orig, id: nid, selected: false, position: { x: orig.position.x + 20, y: orig.position.y + 20 } }];
     });
   }, [setNodes]);
 
   const ctxPreview = useCallback((id: string) => {
     const n = nodes.find((n) => n.id === id);
     if (!n) return;
-    if (n.type === "sourceNode") setLightboxUrl((n.data as unknown as SourceNodeData).previewUrl ?? null);
-    if (n.type === "renderNode") setLightboxUrl((n.data as unknown as RenderNodeData).imageUrl ?? null);
+    const d = n.data as unknown as ImageNodeData;
+    setLightboxUrl(d.imageUrl || d.previewUrl || null);
   }, [nodes]);
 
   const ctxDownload = useCallback((id: string) => {
     const n = nodes.find((n) => n.id === id);
     if (!n) return;
-    const url = n.type === "renderNode" ? (n.data as unknown as RenderNodeData).imageUrl : (n.data as unknown as SourceNodeData).previewUrl;
+    const d = n.data as unknown as ImageNodeData;
+    const url = d.imageUrl || d.previewUrl;
     if (url) downloadUrl(url);
   }, [nodes]);
 
   const ctxEdit = useCallback((id: string) => {
     const n = nodes.find((n) => n.id === id);
-    if (!n || n.type !== "renderNode") return;
-    const url = (n.data as unknown as RenderNodeData).imageUrl;
+    if (!n) return;
+    const d = n.data as unknown as ImageNodeData;
+    const url = d.imageUrl || d.previewUrl;
     if (url) setEditorUrl(url);
+    else toast.info("Sem imagem disponível para edição.");
   }, [nodes]);
 
   const ctxRerender = useCallback((id: string) => {
     const parentEdge = edges.find((e) => e.target === id);
     if (parentEdge) executeRender(parentEdge.source);
-    else toast.info("Sem nó de origem conectado.");
-  }, [edges, executeRender]);
+    else {
+      // Maybe it IS a source node — render it directly
+      const n = nodes.find((n) => n.id === id);
+      if (n) {
+        const d = n.data as unknown as ImageNodeData;
+        if (d.nodeKind === "source") executeRender(id);
+        else toast.info("Sem nó de origem conectado.");
+      }
+    }
+  }, [edges, nodes, executeRender]);
 
   const ctxRender = useCallback((id: string) => executeRender(id), [executeRender]);
 
@@ -499,29 +501,28 @@ function WorkflowEditorInner() {
     setEdges((es) => es.filter((e) => e.source !== id && e.target !== id));
   }, [setEdges]);
 
-  // ── Drop on pane ────────────────────────────────────────────────────────
-  function onDrop(e: React.DragEvent) {
-    e.preventDefault();
-    handleFiles(e.dataTransfer.files);
-  }
+  // ── Counts ────────────────────────────────────────────────────────────────
 
-  // ── Source count for sidebar ────────────────────────────────────────────
-  const sourceCount = nodes.filter((n) => n.type === "sourceNode").length;
-  const readyCount  = nodes.filter((n) => {
-    if (n.type !== "sourceNode") return false;
-    const d = n.data as unknown as SourceNodeData;
-    return d.falUrl && !d.uploading;
+  const sourceCount = nodes.filter((n) => {
+    const d = n.data as unknown as ImageNodeData;
+    return d.nodeKind === "source";
   }).length;
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  const readyCount = nodes.filter((n) => {
+    const d = n.data as unknown as ImageNodeData;
+    return d.nodeKind === "source" && d.falUrl && !d.uploading;
+  }).length;
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
-    <div className="flex flex-1 min-h-0" style={{ background: "#0a0a14" }}>
-      {/* ── Sidebar ── */}
+    <div className="flex flex-1 min-h-0 bg-[#f5f6fa]">
+      {/* Sidebar */}
       <WorkflowSidebar
-        prompt={globalPrompt}          onPromptChange={setGlobalPrompt}
-        model={renderModel}            onModelChange={setRenderModel}
-        strength={strength}            onStrengthChange={setStrength}
-        numOutputs={numOutputs}        onNumOutputsChange={setNumOutputs}
+        prompt={globalPrompt}       onPromptChange={setGlobalPrompt}
+        model={renderModel}         onModelChange={setRenderModel}
+        strength={strength}         onStrengthChange={setStrength}
+        numOutputs={numOutputs}     onNumOutputsChange={setNumOutputs}
         isGenerating={isGenerating}
         readyCount={readyCount}
         onRenderAll={handleRenderAll}
@@ -529,8 +530,12 @@ function WorkflowEditorInner() {
         nodeCount={sourceCount}
       />
 
-      {/* ── Canvas ── */}
-      <div className="flex-1 relative" onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
+      {/* Canvas */}
+      <div
+        className="flex-1 relative"
+        onDrop={(e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
+        onDragOver={(e) => e.preventDefault()}
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -542,46 +547,49 @@ function WorkflowEditorInner() {
           onPaneClick={onPaneClick}
           selectionMode={SelectionMode.Partial}
           multiSelectionKeyCode="Shift"
-          deleteKeyCode={null}   // handled manually
+          deleteKeyCode={null}
           fitView
           fitViewOptions={{ padding: 0.2 }}
-          minZoom={0.1}
+          minZoom={0.15}
           maxZoom={3}
           proOptions={{ hideAttribution: true }}
           defaultEdgeOptions={{
-            type: "smoothstep",
-            animated: true,
-            style: { stroke: "#7c3aed", strokeWidth: 2 },
+            type:      "default",
+            animated:  true,
+            style:     { stroke: "#F97316", strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#F97316" },
           }}
         >
           <Background
             variant={BackgroundVariant.Dots}
-            gap={24}
-            size={1.5}
-            color="#ffffff08"
+            gap={20}
+            size={1.2}
+            color="#d1d5db"
           />
           <Controls
-            className="!bg-[#1a1a2e] !border !border-white/10 !rounded-xl !shadow-xl"
+            className="!bg-white !border !border-gray-200 !rounded-xl !shadow-sm"
             showInteractive={false}
           />
           <MiniMap
-            className="!bg-[#0f0f1e] !border !border-white/10 !rounded-xl"
-            nodeColor="#7c3aed"
-            maskColor="rgba(10,10,20,0.7)"
+            className="!bg-white !border !border-gray-200 !rounded-xl !shadow-sm"
+            nodeColor="#F97316"
+            maskColor="rgba(245,246,250,0.8)"
           />
 
-          {/* ── Empty state hint ── */}
+          {/* Empty state */}
           {nodes.length === 0 && (
             <Panel position="top-center">
-              <div className="mt-16 flex flex-col items-center gap-4 pointer-events-none select-none">
-                <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
-                  <FolderOpen className="w-8 h-8 text-white/20" />
+              <div className="mt-20 flex flex-col items-center gap-4 pointer-events-none select-none">
+                <div className="w-16 h-16 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center justify-center">
+                  <ImageIcon className="w-7 h-7 text-gray-300" />
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-semibold text-white/30 mb-1">Nenhuma imagem no canvas</p>
-                  <p className="text-xs text-white/15">
-                    Arraste imagens aqui ou clique em{" "}
-                    <span className="text-violet-400/50">Adicionar imagem</span>
+                  <p className="text-sm font-semibold text-gray-400 mb-1">
+                    Nenhuma imagem no canvas
+                  </p>
+                  <p className="text-xs text-gray-300">
+                    Arraste renders 3D aqui ou clique em{" "}
+                    <span className="text-[var(--color-brand)]">Adicionar imagem</span>
                   </p>
                 </div>
               </div>
@@ -589,7 +597,7 @@ function WorkflowEditorInner() {
           )}
         </ReactFlow>
 
-        {/* ── Context menu ── */}
+        {/* Context menu */}
         {contextMenu && (
           <ContextMenu
             menu={contextMenu}
@@ -607,50 +615,45 @@ function WorkflowEditorInner() {
         )}
       </div>
 
-      {/* ── Hidden file input ── */}
+      {/* File input */}
       <input
         ref={fileRef}
-        type="file"
-        accept="image/*"
-        multiple
+        type="file" accept="image/*" multiple
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
 
-      {/* ── Lightbox ── */}
+      {/* Lightbox */}
       {lightboxUrl && (
         <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
           onClick={() => setLightboxUrl(null)}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={lightboxUrl}
-            alt="preview"
+            src={lightboxUrl} alt="preview"
             className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
             draggable={false}
           />
           <button
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors"
             onClick={() => setLightboxUrl(null)}
           >
             ✕
           </button>
+          <p className="absolute bottom-4 text-white/40 text-xs select-none">ESC para fechar</p>
         </div>
       )}
 
-      {/* ── Inpainting Editor ── */}
+      {/* Inpainting editor */}
       {editorUrl && (
-        <ImageEditor
-          imageUrl={editorUrl}
-          onClose={() => setEditorUrl(null)}
-        />
+        <ImageEditor imageUrl={editorUrl} onClose={() => setEditorUrl(null)} />
       )}
     </div>
   );
 }
 
-// ── Exported wrapper with provider ──────────────────────────────────────────
+// ── Provider wrapper ──────────────────────────────────────────────────────────
 
 export function WorkflowEditor() {
   return (
