@@ -37,14 +37,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Imagem muito grande (máx 20MB)" }, { status: 400 });
     }
 
-    // Materialize the Next.js stream-backed File into an in-memory File so
+    // Materialize the Next.js stream-backed File into an in-memory Blob so
     // @fal-ai/client can use it as a fetch PUT body without stream-exhaustion errors.
+    // Usamos Blob e não File pois a classe File não é global em todos os runtimes da Vercel.
     const arrayBuffer = await file.arrayBuffer();
     const mimeType    = file.type || "image/jpeg";
-    const fileName    = file.name || `upload.${mimeType.split("/")[1] ?? "jpg"}`;
-    const staticFile  = new File([arrayBuffer], fileName, { type: mimeType });
+    const staticBlob  = new Blob([arrayBuffer], { type: mimeType });
 
-    const url = await fal.storage.upload(staticFile);
+    const url = await fal.storage.upload(staticBlob);
 
     return NextResponse.json({ url });
   } catch (error) {
