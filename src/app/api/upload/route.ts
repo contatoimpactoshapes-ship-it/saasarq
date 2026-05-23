@@ -20,9 +20,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Nenhum arquivo enviado" }, { status: 400 });
     }
 
-    // Only allow image files
-    if (!file.type.startsWith("image/")) {
-      return NextResponse.json({ error: "Apenas imagens são aceitas" }, { status: 400 });
+    // Validação flexível: MIME type OU extensão do arquivo
+    const isImageMime = file.type.startsWith("image/");
+    const isImageExt  = /\.(jpg|jpeg|png|webp|gif)$/i.test(file.name);
+    if (!isImageMime && !isImageExt) {
+      return NextResponse.json({ error: `Apenas imagens são aceitas (tipo recebido: ${file.type})` }, { status: 400 });
     }
 
     // Max 20MB
@@ -30,8 +32,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Imagem muito grande (máx 20MB)" }, { status: 400 });
     }
 
-    // Upload to FAL storage — returns a persistent URL usable by FAL models
-    const url = await fal.storage.upload(file);
+    // Materialize the Next.js stream-backed File into an in-memory File so
+    // @fal-ai/client can use it as a fetch PUT body without stream-exhaustion errors.
+    const arrayBuffer = await file.arrayBuffer();
+    const mimeType    = file.type || "image/jpeg";
+    const fileName    = file.name || `upload.${mimeType.split("/")[1] ?? "jpg"}`;
+    const staticFile  = new File([arrayBuffer], fileName, { type: mimeType });
+
+    const url = await fal.storage.upload(staticFile);
 
     return NextResponse.json({ url });
   } catch (error) {

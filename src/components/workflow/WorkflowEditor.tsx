@@ -270,7 +270,9 @@ function WorkflowEditorInner() {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      if (!file.type.startsWith("image/")) { toast.error(`${file.name}: apenas imagens`); continue; }
+      const isImageMime = file.type.startsWith("image/");
+      const isImageExt  = /\.(jpg|jpeg|png|webp|gif)$/i.test(file.name);
+      if (!isImageMime && !isImageExt) { toast.error(`${file.name}: apenas imagens`); continue; }
       if (file.size > 20 * 1024 * 1024)   { toast.error(`${file.name}: máx 20 MB`); continue; }
       if (existing + i >= 8)               { toast.error("Máximo de 8 imagens"); break; }
 
@@ -300,9 +302,10 @@ function WorkflowEditorInner() {
             const d = n.data as unknown as ImageNodeData;
             return { ...n, data: { ...d, falUrl: data.url, uploading: false, status: "ready" as NodeStatus } };
           }));
-        } catch {
+        } catch (err) {
           setNodes((ns) => ns.filter((n) => n.id !== nodeId));
-          toast.error(`Falha ao enviar ${label}`);
+          const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
+          toast.error(`Falha ao enviar ${label}: ${errorMessage}`);
         }
       })();
     }
