@@ -8,6 +8,11 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
+    if (!process.env.FAL_KEY) {
+      console.error("[POST /api/upload] FAL_KEY env var not set");
+      return NextResponse.json({ error: "Upload não configurado (FAL_KEY ausente)" }, { status: 500 });
+    }
+
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

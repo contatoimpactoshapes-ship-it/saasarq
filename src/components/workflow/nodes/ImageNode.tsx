@@ -103,7 +103,7 @@ function ImageNodeComponent({ data, selected }: NodeProps) {
 
         {/* ── Image area ── */}
         <div className="relative w-full aspect-square bg-gray-50 overflow-hidden">
-          {displayUrl && !isProcessing && !isPending ? (
+          {displayUrl && !isProcessing && (!isPending || d.uploading) ? (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
