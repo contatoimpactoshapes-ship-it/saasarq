@@ -1,6 +1,20 @@
 import { prisma } from "./prisma";
 
+// Active only when NODE_ENV=development AND LOCAL_INFINITE_CREDITS=true.
+// NODE_ENV is hard-set to "production" by Next.js on every Vercel build,
+// making this structurally impossible to trigger in production.
+function isLocalInfiniteCredits(): boolean {
+  return (
+    process.env.NODE_ENV === "development" &&
+    process.env.LOCAL_INFINITE_CREDITS === "true"
+  );
+}
+
 export async function getUserCredits(userId: string): Promise<number> {
+  if (isLocalInfiniteCredits()) {
+    console.log("[LOCAL_INFINITE_CREDITS ativo] getUserCredits → 999999");
+    return 999999;
+  }
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { credits: true },
@@ -14,6 +28,10 @@ export async function debitCredits(
   description: string,
   generationId?: string
 ): Promise<void> {
+  if (isLocalInfiniteCredits()) {
+    console.log("[LOCAL_INFINITE_CREDITS ativo] debitCredits ignorado:", description, amount);
+    return;
+  }
   // Admins never have credits deducted
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
   if (user?.isAdmin) return;
@@ -80,6 +98,10 @@ export async function hasEnoughCredits(
   userId: string,
   required: number
 ): Promise<boolean> {
+  if (isLocalInfiniteCredits()) {
+    console.log("[LOCAL_INFINITE_CREDITS ativo] hasEnoughCredits → true (required:", required, ")");
+    return true;
+  }
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { credits: true, isAdmin: true },

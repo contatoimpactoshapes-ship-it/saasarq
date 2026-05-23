@@ -16,8 +16,16 @@ export async function GET() {
 
     const user = await getOrCreateUser(clerkId, email);
 
+    const localDev =
+      process.env.NODE_ENV === "development" &&
+      process.env.LOCAL_INFINITE_CREDITS === "true";
+
+    if (localDev) {
+      console.log("[LOCAL_INFINITE_CREDITS ativo] /api/credits → 999999");
+    }
+
     return NextResponse.json({
-      credits: user.isAdmin ? 999999 : user.credits,
+      credits: localDev || user.isAdmin ? 999999 : user.credits,
       plan: user.plan,
       userId: user.id,
       isAdmin: user.isAdmin,
