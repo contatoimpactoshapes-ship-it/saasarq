@@ -27,6 +27,8 @@ const STATIC_MODEL_MAP: Record<string, string> = {
   "render-gpt-image-2":      "openai/gpt-image-2/edit",
   // SDXL
   "render-sdxl":             "fal-ai/stable-diffusion-xl/image-to-image",
+  // Inpainting
+  "inpaint-flux-fill":       "fal-ai/flux/dev/fill",
 };
 
 export function getFalModelId(modelId: string): string | undefined {

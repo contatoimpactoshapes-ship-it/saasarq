@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Handle, Position, NodeProps, NodeToolbar } from "@xyflow/react";
 import {
   Loader2, AlertCircle, Download, Paintbrush, Trash2,
@@ -8,33 +8,24 @@ import {
   FolderInput, Search, History, Upload,
 } from "lucide-react";
 
+import { useWorkflow } from "../WorkflowContext";
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type NodeKind   = "source" | "render";
 export type NodeStatus = "pending" | "processing" | "completed" | "failed" | "ready";
 
 export interface ImageNodeData extends Record<string, unknown> {
-  nodeKind:     NodeKind;
-  label?:       string;
-  // image URL – whichever is available
-  imageUrl?:    string;   // completed render / source preview
-  previewUrl?:  string;   // source blob URL before upload
-  falUrl?:      string;   // uploaded URL (source nodes)
-  status?:      NodeStatus;
-  uploading?:   boolean;
-  prompt?:      string;
+  nodeId:        string;
+  nodeKind:      NodeKind;
+  label?:        string;
+  imageUrl?:     string;
+  previewUrl?:   string;
+  falUrl?:       string;
+  status?:       NodeStatus;
+  uploading?:    boolean;
+  prompt?:       string;
   errorMessage?: string;
-  // ── unified actions ──────────────────────────────
-  onDelete:    () => void;
-  onEdit:      () => void;    // inpainting
-  onDownload:  () => void;
-  onDuplicate: () => void;
-  onPreview:   () => void;
-  onRender:    () => void;    // source: start render / render: re-render
-  onReplace?:  () => void;    // source only
-  onMoveToFolder?: () => void;
-  onFindSimilar?:  () => void;
-  onHistory?:      () => void;
 }
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -58,16 +49,17 @@ const STATUS_LABEL: Record<NodeStatus, string> = {
 // ── Main component ────────────────────────────────────────────────────────────
 
 function ImageNodeComponent({ data, selected }: NodeProps) {
-  const d = data as unknown as ImageNodeData;
+  const d       = data as unknown as ImageNodeData;
+  const actions = useWorkflow();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const isSource    = d.nodeKind === "source";
-  const status      = d.status ?? (d.falUrl && !d.uploading ? "ready" : d.uploading ? "pending" : "pending");
-  const displayUrl  = d.imageUrl || d.previewUrl || "";
-  const isCompleted = status === "completed" || status === "ready";
+  const isSource     = d.nodeKind === "source";
+  const status       = d.status ?? (d.falUrl && !d.uploading ? "ready" : "pending");
+  const displayUrl   = d.imageUrl || d.previewUrl || "";
+  const isCompleted  = status === "completed" || status === "ready";
   const isProcessing = status === "processing";
-  const isFailed    = status === "failed";
-  const isPending   = status === "pending";
+  const isFailed     = status === "failed";
+  const isPending    = status === "pending";
 
   const borderColor = selected
     ? "ring-2 ring-[var(--color-brand)] shadow-[0_0_0_4px_rgba(249,115,22,0.12)]"
@@ -99,7 +91,7 @@ function ImageNodeComponent({ data, selected }: NodeProps) {
           <div className="relative ml-auto">
             <button
               onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
-              className="w-6 h-6 rounded-lg flex items-center justify-center text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              className="w-6 h-6 rounded-lg flex items-center justify-center text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-colors nodrag"
             >
               <MoreHorizontal className="w-3.5 h-3.5" />
             </button>
@@ -131,9 +123,9 @@ function ImageNodeComponent({ data, selected }: NodeProps) {
               {isCompleted && !d.uploading && (
                 <div className="absolute inset-0 bg-black/0 hover:bg-black/30 transition-all duration-200
                   flex items-center justify-center gap-2 opacity-0 hover:opacity-100">
-                  <OverlayBtn icon={<Eye className="w-3.5 h-3.5" />} onClick={d.onPreview} title="Visualizar" />
-                  <OverlayBtn icon={<Paintbrush className="w-3.5 h-3.5" />} onClick={d.onEdit} title="Editar" accent />
-                  <OverlayBtn icon={<Download className="w-3.5 h-3.5" />} onClick={d.onDownload} title="Baixar" />
+                  <OverlayBtn icon={<Eye className="w-3.5 h-3.5" />}        onClick={() => actions.onPreview(d.nodeId)}  title="Visualizar" />
+                  <OverlayBtn icon={<Paintbrush className="w-3.5 h-3.5" />} onClick={() => actions.onEdit(d.nodeId)}     title="Editar" accent />
+                  <OverlayBtn icon={<Download className="w-3.5 h-3.5" />}   onClick={() => actions.onDownload(d.nodeId)} title="Baixar" />
                 </div>
               )}
             </>
@@ -159,7 +151,7 @@ function ImageNodeComponent({ data, selected }: NodeProps) {
           {!d.uploading && (
             <div className="flex items-center gap-0.5 shrink-0">
               {isCompleted && (
-                <QuickBtn icon={<Download className="w-3 h-3" />} title="Baixar" onClick={d.onDownload} />
+                <QuickBtn icon={<Download className="w-3 h-3" />} title="Baixar" onClick={() => actions.onDownload(d.nodeId)} />
               )}
               <QuickBtn
                 icon={isSource
@@ -167,7 +159,7 @@ function ImageNodeComponent({ data, selected }: NodeProps) {
                   : <RefreshCw className="w-3 h-3" />
                 }
                 title={isSource ? "Renderizar" : "Re-renderizar"}
-                onClick={d.onRender}
+                onClick={() => actions.onRender(d.nodeId)}
                 disabled={isProcessing || isPending || (isSource && !d.falUrl)}
                 accent
               />
@@ -177,7 +169,6 @@ function ImageNodeComponent({ data, selected }: NodeProps) {
       </div>
 
       {/* ── Handles ── */}
-      {/* Source nodes have output handle. Render nodes have input + output (for chaining) */}
       {isSource && (
         <Handle
           type="source"
@@ -211,37 +202,36 @@ function ImageNodeComponent({ data, selected }: NodeProps) {
 // ── Toolbar (shown on node select) ───────────────────────────────────────────
 
 function Toolbar({ d, status, isSource }: { d: ImageNodeData; status: NodeStatus; isSource: boolean }) {
+  const actions      = useWorkflow();
   const isCompleted  = status === "completed" || status === "ready";
   const isProcessing = status === "processing";
 
   return (
     <div className="flex items-center gap-0.5 bg-white border border-gray-200 rounded-xl px-1.5 py-1 shadow-lg shadow-black/5">
-      {/* Always available */}
-      <TBtn icon={<Eye className="w-3.5 h-3.5" />}        title="Visualizar"       onClick={d.onPreview}   disabled={!isCompleted} />
+      <TBtn icon={<Eye className="w-3.5 h-3.5" />}        title="Visualizar"       onClick={() => actions.onPreview(d.nodeId)}   disabled={!isCompleted} />
       {isCompleted && (
         <>
-          <TBtn icon={<Maximize2 className="w-3.5 h-3.5" />}  title="Tela cheia"       onClick={d.onPreview}   />
-          <TBtn icon={<Paintbrush className="w-3.5 h-3.5" />} title="Editar / Inpaint" onClick={d.onEdit}      accent />
+          <TBtn icon={<Maximize2 className="w-3.5 h-3.5" />}  title="Tela cheia"       onClick={() => actions.onPreview(d.nodeId)}   />
+          <TBtn icon={<Paintbrush className="w-3.5 h-3.5" />} title="Editar / Inpaint" onClick={() => actions.onEdit(d.nodeId)}      accent />
         </>
       )}
       <TDivider />
-      {/* Render / Re-render */}
       <TBtn
         icon={isSource ? <Cpu className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
         title={isSource ? "Renderizar" : "Re-renderizar"}
-        onClick={d.onRender}
+        onClick={() => actions.onRender(d.nodeId)}
         disabled={isProcessing || (isSource && !d.falUrl)}
         accent={isSource}
       />
       {isCompleted && (
-        <TBtn icon={<Download className="w-3.5 h-3.5" />}     title="Baixar"           onClick={d.onDownload}  />
+        <TBtn icon={<Download className="w-3.5 h-3.5" />}  title="Baixar"        onClick={() => actions.onDownload(d.nodeId)}  />
       )}
-      <TBtn icon={<Copy className="w-3.5 h-3.5" />}           title="Duplicar"         onClick={d.onDuplicate} />
-      {d.onReplace && (
-        <TBtn icon={<Upload className="w-3.5 h-3.5" />}       title="Substituir"       onClick={d.onReplace}   />
+      <TBtn icon={<Copy className="w-3.5 h-3.5" />}        title="Duplicar"      onClick={() => actions.onDuplicate(d.nodeId)} />
+      {isSource && (
+        <TBtn icon={<Upload className="w-3.5 h-3.5" />}    title="Substituir"    onClick={() => actions.onReplace(d.nodeId)}   />
       )}
       <TDivider />
-      <TBtn icon={<Trash2 className="w-3.5 h-3.5" />}         title="Deletar (Del)"    onClick={d.onDelete}    danger />
+      <TBtn icon={<Trash2 className="w-3.5 h-3.5" />}      title="Deletar (Del)" onClick={() => actions.onDelete(d.nodeId)}    danger />
     </div>
   );
 }
@@ -251,7 +241,18 @@ function Toolbar({ d, status, isSource }: { d: ImageNodeData; status: NodeStatus
 function DotMenu({
   d, status, isSource, onClose,
 }: { d: ImageNodeData; status: NodeStatus; isSource: boolean; onClose: () => void }) {
+  const actions     = useWorkflow();
+  const ref         = useRef<HTMLDivElement>(null);
   const isCompleted = status === "completed" || status === "ready";
+
+  // C4 — close when clicking outside the dropdown (capture phase avoids RF interference)
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler, true);
+    return () => document.removeEventListener("mousedown", handler, true);
+  }, [onClose]);
 
   function item(label: string, icon: React.ReactNode, onClick: () => void, accent = false, danger = false) {
     return (
@@ -272,25 +273,28 @@ function DotMenu({
 
   return (
     <div
+      ref={ref}
       className="absolute right-0 top-7 z-50 min-w-[170px] bg-white border border-gray-200
-        rounded-xl shadow-xl shadow-black/8 overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+        rounded-xl shadow-xl shadow-black/8 overflow-hidden animate-in fade-in zoom-in-95 duration-100 nodrag"
       onClick={(e) => e.stopPropagation()}
     >
-      {item("Visualizar", <Eye className="w-3.5 h-3.5" />, d.onPreview)}
-      {isCompleted && item("Editar / Inpaint", <Paintbrush className="w-3.5 h-3.5" />, d.onEdit, true)}
-      {isCompleted && item("Baixar", <Download className="w-3.5 h-3.5" />, d.onDownload)}
+      {item("Visualizar", <Eye className="w-3.5 h-3.5" />, () => actions.onPreview(d.nodeId))}
+      {isCompleted && item("Editar / Inpaint", <Paintbrush className="w-3.5 h-3.5" />, () => actions.onEdit(d.nodeId), true)}
+      {isCompleted && item("Baixar", <Download className="w-3.5 h-3.5" />, () => actions.onDownload(d.nodeId))}
       <div className="border-t border-gray-100 my-0.5" />
-      {item(isSource ? "Renderizar" : "Re-renderizar",
+      {item(
+        isSource ? "Renderizar" : "Re-renderizar",
         isSource ? <Cpu className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />,
-        d.onRender, true)}
-      {d.onFindSimilar && item("Descobrir similares", <Search className="w-3.5 h-3.5" />, d.onFindSimilar)}
-      {d.onMoveToFolder && item("Mover para pasta", <FolderInput className="w-3.5 h-3.5" />, d.onMoveToFolder)}
-      {d.onHistory && item("Histórico", <History className="w-3.5 h-3.5" />, d.onHistory)}
+        () => actions.onRender(d.nodeId), true,
+      )}
+      {item("Descobrir similares", <Search className="w-3.5 h-3.5" />,    () => actions.onFindSimilar(d.nodeId))}
+      {item("Mover para pasta",    <FolderInput className="w-3.5 h-3.5" />, () => actions.onMoveToFolder(d.nodeId))}
+      {item("Histórico",           <History className="w-3.5 h-3.5" />,    () => actions.onHistory(d.nodeId))}
       <div className="border-t border-gray-100 my-0.5" />
-      {item("Duplicar", <Copy className="w-3.5 h-3.5" />, d.onDuplicate)}
-      {d.onReplace && item("Substituir imagem", <Upload className="w-3.5 h-3.5" />, d.onReplace)}
+      {item("Duplicar", <Copy className="w-3.5 h-3.5" />, () => actions.onDuplicate(d.nodeId))}
+      {isSource && item("Substituir imagem", <Upload className="w-3.5 h-3.5" />, () => actions.onReplace(d.nodeId))}
       <div className="border-t border-gray-100 my-0.5" />
-      {item("Excluir", <Trash2 className="w-3.5 h-3.5" />, d.onDelete, false, true)}
+      {item("Excluir", <Trash2 className="w-3.5 h-3.5" />, () => actions.onDelete(d.nodeId), false, true)}
     </div>
   );
 }
@@ -377,7 +381,7 @@ function OverlayBtn({
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       title={title}
       className={`
-        w-8 h-8 rounded-full flex items-center justify-center shadow-lg transition-colors
+        w-8 h-8 rounded-full flex items-center justify-center shadow-lg transition-colors nodrag
         ${accent
           ? "bg-[var(--color-brand)] text-white hover:bg-orange-600"
           : "bg-white text-gray-700 hover:bg-gray-50"
@@ -398,7 +402,7 @@ function QuickBtn({
       title={title}
       disabled={disabled}
       className={`
-        w-6 h-6 rounded-md flex items-center justify-center transition-colors
+        w-6 h-6 rounded-md flex items-center justify-center transition-colors nodrag
         disabled:opacity-30 disabled:cursor-not-allowed
         ${accent
           ? "text-[var(--color-brand)] hover:bg-orange-50"

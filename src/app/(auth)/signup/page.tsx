@@ -16,6 +16,7 @@ export default function SignUpPage() {
         </div>
       </div>
       <SignUp
+        routing="hash"
         appearance={{
           elements: {
             card: "shadow-[var(--shadow-modal)] border border-[var(--border-subtle)] rounded-2xl",

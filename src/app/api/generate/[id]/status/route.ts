@@ -15,6 +15,10 @@ function extractOutputUrls(data: unknown): string[] {
   if (Array.isArray(d.images)) {
     return (d.images as { url: string }[]).map((i) => i.url).filter(Boolean);
   }
+  // Image: { image: { url } }
+  if (d.image && typeof (d.image as Record<string, unknown>).url === "string") {
+    return [(d.image as Record<string, unknown>).url as string];
+  }
   // Video: { video: { url } }
   if (d.video && typeof (d.video as Record<string, unknown>).url === "string") {
     return [(d.video as Record<string, unknown>).url as string];

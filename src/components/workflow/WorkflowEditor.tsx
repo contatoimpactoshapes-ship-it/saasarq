@@ -20,6 +20,7 @@ import { ImageIcon } from "lucide-react";
 import { ImageNode, ImageNodeData, NodeStatus } from "./nodes/ImageNode";
 import { ContextMenu, ContextMenuState } from "./ContextMenu";
 import { WorkflowSidebar } from "./WorkflowSidebar";
+import { WorkflowContext } from "./WorkflowContext";
 import { useGenerationStore } from "@/stores/useGenerationStore";
 import { useCreditsStore } from "@/stores/useCreditsStore";
 import { ImageEditor } from "@/components/tools/ImageEditor";
@@ -73,7 +74,7 @@ function WorkflowEditorInner() {
   const [strength,     setStrength]     = useState(0.82);
   const [numOutputs,   setNumOutputs]   = useState(1);
 
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [activeJobs, setActiveJobs] = useState(0);
   const [contextMenu,  setContextMenu]  = useState<ContextMenuState | null>(null);
   const [lightboxUrl,  setLightboxUrl]  = useState<string | null>(null);
   const [editorUrl,    setEditorUrl]    = useState<string | null>(null);
@@ -107,7 +108,7 @@ function WorkflowEditorInner() {
             return { ...n, data: { ...d, status: "completed" as NodeStatus, imageUrl: url } };
           }));
           refreshCredits();
-          setIsGenerating(false);
+          setActiveJobs((n) => Math.max(0, n - 1));
           toast.success("Render concluído!");
         } else if (data.status === "FAILED") {
           stopPoll(genId);
@@ -118,7 +119,7 @@ function WorkflowEditorInner() {
             return { ...n, data: { ...d, status: "failed" as NodeStatus, errorMessage: data.error } };
           }));
           refreshCredits();
-          setIsGenerating(false);
+          setActiveJobs((n) => Math.max(0, n - 1));
           toast.error(data.error ?? "Falha na geração. Créditos reembolsados.");
         } else {
           setNodes((ns) => ns.map((n) => {
@@ -135,44 +136,12 @@ function WorkflowEditorInner() {
 
   // ── Node data builders ────────────────────────────────────────────────────
 
-  function buildRenderData(
-    nodeId: string,
-    sourceNodeId: string,
-    partial: Partial<ImageNodeData>,
-  ): ImageNodeData {
+  function buildRenderData(nodeId: string, partial: Partial<ImageNodeData>): ImageNodeData {
     return {
-      nodeKind:  "render",
-      status:    "pending",
+      nodeKind: "render",
+      status:   "pending",
       ...partial,
-      onDelete:   () => {
-        setNodes((ns) => ns.filter((n) => n.id !== nodeId));
-        setEdges((es) => es.filter((e) => e.source !== nodeId && e.target !== nodeId));
-      },
-      onEdit:     () => {
-        const url = partial.imageUrl;
-        if (url) setEditorUrl(url);
-        else toast.info("Imagem ainda não gerada.");
-      },
-      onDownload: () => { if (partial.imageUrl) downloadUrl(partial.imageUrl); },
-      onDuplicate: () => {
-        setNodes((ns) => {
-          const orig = ns.find((n) => n.id === nodeId);
-          if (!orig) return ns;
-          const d    = orig.data as unknown as ImageNodeData;
-          const nid  = `rn-dup-${Date.now()}`;
-          return [...ns, {
-            ...orig,
-            id: nid, selected: false,
-            position: { x: orig.position.x + 20, y: orig.position.y + 20 },
-            data: buildRenderData(nid, sourceNodeId, d),
-          }];
-        });
-      },
-      onPreview:  () => { const url = partial.imageUrl; if (url) setLightboxUrl(url); },
-      onRender:   () => executeRender(sourceNodeId),
-      onMoveToFolder: () => toast.info("Em breve: mover para pasta"),
-      onFindSimilar:  () => toast.info("Em breve: similares"),
-      onHistory:      () => toast.info("Em breve: histórico"),
+      nodeId,
     };
   }
 
@@ -182,35 +151,7 @@ function WorkflowEditorInner() {
       status:   partial.uploading ? "pending" : partial.falUrl ? "ready" : "pending",
       label:    "imagem",
       ...partial,
-      onDelete: () => {
-        setNodes((ns) => ns.filter((n) => n.id !== nodeId));
-        setEdges((es) => es.filter((e) => e.source !== nodeId && e.target !== nodeId));
-      },
-      onEdit: () => {
-        const url = partial.previewUrl;
-        if (url) setEditorUrl(url);
-      },
-      onDownload: () => { if (partial.previewUrl) downloadUrl(partial.previewUrl, partial.label ?? "imagem"); },
-      onDuplicate: () => {
-        setNodes((ns) => {
-          const orig = ns.find((n) => n.id === nodeId);
-          if (!orig) return ns;
-          const d    = orig.data as unknown as ImageNodeData;
-          const nid  = `sn-dup-${Date.now()}`;
-          return [...ns, {
-            ...orig,
-            id: nid, selected: false,
-            position: { x: orig.position.x + 20, y: orig.position.y + 20 },
-            data: buildSourceData(nid, d),
-          }];
-        });
-      },
-      onPreview:  () => { if (partial.previewUrl) setLightboxUrl(partial.previewUrl); },
-      onRender:   () => executeRender(nodeId),
-      onReplace:  () => fileRef.current?.click(),
-      onMoveToFolder: () => toast.info("Em breve: mover para pasta"),
-      onFindSimilar:  () => toast.info("Em breve: similares"),
-      onHistory:      () => toast.info("Em breve: histórico"),
+      nodeId,
     };
   }
 
@@ -232,7 +173,6 @@ function WorkflowEditorInner() {
       return;
     }
 
-    setIsGenerating(true);
     decrementCredits(cost);
 
     const existingRenderCount = edges.filter((e) => e.source === sourceNodeId).length;
@@ -240,6 +180,7 @@ function WorkflowEditorInner() {
     for (let i = 0; i < numOutputs; i++) {
       const renderNodeId = `rn-${Date.now()}-${sourceNodeId}-${i}`;
       const optId        = `opt-${Date.now()}-${i}`;
+      setActiveJobs((n) => n + 1);
 
       // Position: stack to the right, offset vertically
       const col = Math.floor(i / 4);
@@ -252,7 +193,7 @@ function WorkflowEditorInner() {
           x: RENDER_X + col * 240,
           y: sourceNode.position.y + (row % 4) * NODE_STEP_Y,
         },
-        data: buildRenderData(renderNodeId, sourceNodeId, {
+        data: buildRenderData(renderNodeId, {
           status:  "pending",
           prompt:  globalPrompt || sd.label,
           label:   `Variação ${existingRenderCount + i + 1}`,
@@ -298,7 +239,7 @@ function WorkflowEditorInner() {
           return { ...n, data: { ...d, status: "failed" as NodeStatus } };
         }));
         refreshCredits();
-        setIsGenerating(false);
+        setActiveJobs((n) => Math.max(0, n - 1));
         toast.error(err instanceof Error ? err.message : "Erro ao renderizar");
       }
     }
@@ -357,16 +298,7 @@ function WorkflowEditorInner() {
           setNodes((ns) => ns.map((n) => {
             if (n.id !== nodeId) return n;
             const d = n.data as unknown as ImageNodeData;
-            return {
-              ...n,
-              data: {
-                ...d,
-                falUrl:   data.url,
-                uploading: false,
-                status:    "ready" as NodeStatus,
-                onRender:  () => executeRender(nodeId),
-              },
-            };
+            return { ...n, data: { ...d, falUrl: data.url, uploading: false, status: "ready" as NodeStatus } };
           }));
         } catch {
           setNodes((ns) => ns.filter((n) => n.id !== nodeId));
@@ -423,12 +355,15 @@ function WorkflowEditorInner() {
         e.preventDefault();
         setNodes((ns) => {
           const selected = ns.filter((n) => n.selected);
-          const clones: Node[] = selected.map((n) => ({
-            ...n,
-            id:       `${n.id}-dup-${Date.now()}`,
-            selected: false,
-            position: { x: n.position.x + 20, y: n.position.y + 20 },
-          }));
+          const clones: Node[] = selected.map((n) => {
+            const nid = `${n.id}-dup-${Date.now()}`;
+            return {
+              ...n,
+              id: nid, selected: false,
+              position: { x: n.position.x + 20, y: n.position.y + 20 },
+              data: { ...(n.data as Record<string, unknown>), nodeId: nid },
+            };
+          });
           return [...ns.map((n) => ({ ...n, selected: false })), ...clones];
         });
       }
@@ -453,9 +388,19 @@ function WorkflowEditorInner() {
       const orig = ns.find((n) => n.id === id);
       if (!orig) return ns;
       const nid = `${id}-dup-${Date.now()}`;
-      return [...ns, { ...orig, id: nid, selected: false, position: { x: orig.position.x + 20, y: orig.position.y + 20 } }];
+      return [...ns, {
+        ...orig,
+        id: nid, selected: false,
+        position: { x: orig.position.x + 20, y: orig.position.y + 20 },
+        data: { ...(orig.data as Record<string, unknown>), nodeId: nid },
+      }];
     });
   }, [setNodes]);
+
+  const ctxReplace      = useCallback(() => fileRef.current?.click(), []);
+  const ctxMoveToFolder = useCallback((_id: string) => toast.info("Em breve: mover para pasta"), []);
+  const ctxFindSimilar  = useCallback((_id: string) => toast.info("Em breve: similares"), []);
+  const ctxHistory      = useCallback((_id: string) => toast.info("Em breve: histórico"), []);
 
   const ctxPreview = useCallback((id: string) => {
     const n = nodes.find((n) => n.id === id);
@@ -515,7 +460,23 @@ function WorkflowEditorInner() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  const isGenerating = activeJobs > 0;
+
+  const contextValue = {
+    onPreview:      ctxPreview,
+    onEdit:         ctxEdit,
+    onDownload:     ctxDownload,
+    onRender:       ctxRerender,
+    onDelete:       ctxDelete,
+    onDuplicate:    ctxDuplicate,
+    onReplace:      ctxReplace,
+    onMoveToFolder: ctxMoveToFolder,
+    onFindSimilar:  ctxFindSimilar,
+    onHistory:      ctxHistory,
+  };
+
   return (
+    <WorkflowContext.Provider value={contextValue}>
     <div className="flex flex-1 min-h-0 bg-[#f5f6fa]">
       {/* Sidebar */}
       <WorkflowSidebar
@@ -611,6 +572,9 @@ function WorkflowEditorInner() {
             onRender={ctxRender}
             onDisconnect={ctxDisconnect}
             onFitView={() => fitView({ duration: 400, padding: 0.15 })}
+            onHistory={ctxHistory}
+            onFindSimilar={ctxFindSimilar}
+            onMoveToFolder={ctxMoveToFolder}
           />
         )}
       </div>
@@ -650,6 +614,7 @@ function WorkflowEditorInner() {
         <ImageEditor imageUrl={editorUrl} onClose={() => setEditorUrl(null)} />
       )}
     </div>
+    </WorkflowContext.Provider>
   );
 }
 
