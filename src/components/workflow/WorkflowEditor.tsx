@@ -16,6 +16,7 @@ import "@xyflow/react/dist/style.css";
 
 import { toast } from "sonner";
 import { ImageIcon } from "lucide-react";
+import { sanitizeError } from "@/lib/errors";
 
 import { ImageNode, ImageNodeData, NodeStatus } from "./nodes/ImageNode";
 import { ContextMenu, ContextMenuState } from "./ContextMenu";
@@ -233,15 +234,16 @@ function WorkflowEditorInner() {
         }));
         startPoll(result.generationId, renderNodeId);
       } catch (err) {
+        const errorMessage = sanitizeError(err);
         updateGeneration(optId, { status: "FAILED" });
         setNodes((ns) => ns.map((n) => {
           if (n.id !== renderNodeId) return n;
           const d = n.data as unknown as ImageNodeData;
-          return { ...n, data: { ...d, status: "failed" as NodeStatus } };
+          return { ...n, data: { ...d, status: "failed" as NodeStatus, errorMessage } };
         }));
         refreshCredits();
         setActiveJobs((n) => Math.max(0, n - 1));
-        toast.error(err instanceof Error ? err.message : "Erro ao renderizar");
+        toast.error(errorMessage);
       }
     }
   }, [nodes, edges, numOutputs, credits, globalPrompt, renderModel, strength,
@@ -297,12 +299,13 @@ function WorkflowEditorInner() {
             return { ...n, data: { ...d, falUrl: data.url, uploading: false, status: "ready" as NodeStatus } };
           }));
         } catch (err) {
+          const errorMessage = sanitizeError(err);
           setNodes((ns) => ns.map((n) => {
             if (n.id !== replaceId) return n;
             const d = n.data as unknown as ImageNodeData;
-            return { ...n, data: { ...d, uploading: false, status: "failed" as NodeStatus, errorMessage: "Falha ao substituir" } };
+            return { ...n, data: { ...d, uploading: false, status: "failed" as NodeStatus, errorMessage } };
           }));
-          toast.error(`Falha ao substituir: ${err instanceof Error ? err.message : "Erro"}`);
+          toast.error(errorMessage);
         }
       })();
       return;
@@ -348,14 +351,14 @@ function WorkflowEditorInner() {
             return { ...n, data: { ...d, falUrl: data.url, uploading: false, status: "ready" as NodeStatus } };
           }));
         } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
+          const errorMessage = sanitizeError(err);
           console.error("[upload] falha ao enviar", label, err);
           setNodes((ns) => ns.map((n) => {
             if (n.id !== nodeId) return n;
             const d = n.data as unknown as ImageNodeData;
             return { ...n, data: { ...d, uploading: false, status: "failed" as NodeStatus, errorMessage } };
           }));
-          toast.error(`Falha ao enviar ${label}: ${errorMessage}`);
+          toast.error(errorMessage);
         }
       })();
     }

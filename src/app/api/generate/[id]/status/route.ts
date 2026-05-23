@@ -5,6 +5,7 @@ import { getFalJobStatus, getFalJobResult } from "@/lib/fal";
 import { refundCredits } from "@/lib/credits";
 import { saveImageFromUrl } from "@/lib/r2";
 import { getFalModelId } from "@/lib/model-lookup";
+import { sanitizeError } from "@/lib/errors";
 
 // Extract output URLs from any FAL result payload regardless of media type
 function extractOutputUrls(data: unknown): string[] {
@@ -105,13 +106,14 @@ export async function GET(
         }
       }
       if (vid.status === "failed" || vid.status === "error") {
-        const msg = vid.error?.message ?? "Falha na geração Sora";
+        const raw      = vid.error?.message ?? "Falha na geração Sora";
+        const friendly = sanitizeError(raw);
         await refundCredits(generation.user.id, generation.creditsCost, `Reembolso: Sora falhou`);
         await prisma.generation.update({
           where: { id: generation.id },
-          data:  { status: "FAILED", errorMessage: msg },
+          data:  { status: "FAILED", errorMessage: raw },
         });
-        return NextResponse.json({ status: "FAILED", error: msg, generationId: generation.id });
+        return NextResponse.json({ status: "FAILED", error: friendly, generationId: generation.id });
       }
       // Still queued/processing
       return NextResponse.json({ status: "PROCESSING", generationId: generation.id });

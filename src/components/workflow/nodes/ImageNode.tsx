@@ -134,7 +134,10 @@ function ImageNodeComponent({ data, selected }: NodeProps) {
           ) : isPending && !displayUrl ? (
             <PendingState />
           ) : isFailed ? (
-            <FailedState message={d.errorMessage} />
+            <FailedState
+              message={d.errorMessage}
+              onRetry={() => isSource ? actions.onReplace(d.nodeId) : actions.onRender(d.nodeId)}
+            />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-gray-300">
               <Upload className="w-8 h-8" />
@@ -332,13 +335,22 @@ function PendingState() {
   );
 }
 
-function FailedState({ message }: { message?: string }) {
+function FailedState({ message, onRetry }: { message?: string; onRetry?: () => void }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-red-50 px-3">
       <AlertCircle className="w-7 h-7 text-red-400" />
       <p className="text-[9px] text-center leading-relaxed text-red-400 line-clamp-3">
         {message ?? "Erro na geração"}
       </p>
+      {onRetry && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onRetry(); }}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 hover:bg-red-200 text-red-500 text-[9px] font-semibold transition-colors nodrag"
+        >
+          <RefreshCw className="w-3 h-3" />
+          Tentar novamente
+        </button>
+      )}
     </div>
   );
 }

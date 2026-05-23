@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { fal } from "@fal-ai/client";
+import { logAndSanitize } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -53,8 +54,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error("[POST /api/upload] erro:", msg, error);
-    return NextResponse.json({ error: `Falha no upload: ${msg}` }, { status: 500 });
+    const friendly = logAndSanitize("POST /api/upload", error);
+    return NextResponse.json({ error: friendly }, { status: 500 });
   }
 }

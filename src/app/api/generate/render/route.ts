@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser, debitCredits, refundCredits, hasEnoughCredits } from "@/lib/credits";
 import { submitFalJobRaw } from "@/lib/fal";
 import { getFalModelId } from "@/lib/model-lookup";
+import { logAndSanitize, sanitizeError } from "@/lib/errors";
 
 const FALLBACK_MODEL = "fal-ai/flux/dev/image-to-image";
 const CREDIT_COST = 120;
@@ -178,14 +179,15 @@ export async function POST(req: NextRequest) {
     try {
       falRequestId = await submitFalJobRaw(resolvedFalModel, falInput, webhookUrl);
     } catch (falError: unknown) {
-      const msg = falError instanceof Error ? falError.message : String(falError);
-      console.error("[FAL render error]", msg);
+      const raw      = falError instanceof Error ? falError.message : String(falError);
+      const friendly = sanitizeError(falError);
+      console.error("[FAL render error]", raw, falError);
       await refundCredits(user.id, CREDIT_COST, `Reembolso: falha ao renderizar`);
       await prisma.generation.update({
         where: { id: generation.id },
-        data:  { status: "FAILED", errorMessage: msg },
+        data:  { status: "FAILED", errorMessage: raw },
       });
-      return NextResponse.json({ error: `Falha ao renderizar: ${msg}` }, { status: 500 });
+      return NextResponse.json({ error: friendly }, { status: 500 });
     }
 
     await prisma.generation.update({
@@ -199,7 +201,7 @@ export async function POST(req: NextRequest) {
       creditsCost: CREDIT_COST,
     });
   } catch (error) {
-    console.error("[POST /api/generate/render]", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    const friendly = logAndSanitize("POST /api/generate/render", error);
+    return NextResponse.json({ error: friendly }, { status: 500 });
   }
 }
