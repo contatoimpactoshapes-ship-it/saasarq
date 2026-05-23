@@ -348,8 +348,13 @@ function WorkflowEditorInner() {
             return { ...n, data: { ...d, falUrl: data.url, uploading: false, status: "ready" as NodeStatus } };
           }));
         } catch (err) {
-          setNodes((ns) => ns.filter((n) => n.id !== nodeId));
           const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
+          console.error("[upload] falha ao enviar", label, err);
+          setNodes((ns) => ns.map((n) => {
+            if (n.id !== nodeId) return n;
+            const d = n.data as unknown as ImageNodeData;
+            return { ...n, data: { ...d, uploading: false, status: "failed" as NodeStatus, errorMessage } };
+          }));
           toast.error(`Falha ao enviar ${label}: ${errorMessage}`);
         }
       })();

@@ -2,16 +2,18 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { fal } from "@fal-ai/client";
 
-fal.config({ credentials: process.env.FAL_KEY! });
-
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
+    // Read FAL_KEY at request time — do not capture at module load (stale value risk)
     if (!process.env.FAL_KEY) {
-      console.error("[POST /api/upload] FAL_KEY env var not set");
-      return NextResponse.json({ error: "Upload não configurado (FAL_KEY ausente)" }, { status: 500 });
+      console.error("[POST /api/upload] FAL_KEY não configurada");
+      return NextResponse.json({ error: "Serviço de upload não configurado (FAL_KEY ausente)" }, { status: 500 });
     }
+
+    // Recreate client per-request so credentials are always fresh
+    fal.config({ credentials: process.env.FAL_KEY });
 
     const { userId } = await auth();
     if (!userId) {
@@ -25,30 +27,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Nenhum arquivo enviado" }, { status: 400 });
     }
 
-    // Validação flexível: MIME type OU extensão do arquivo
+    // Accept by MIME type OR extension (WhatsApp / system drag-and-drop may omit MIME)
     const isImageMime = file.type.startsWith("image/");
     const isImageExt  = /\.(jpg|jpeg|png|webp|gif)$/i.test(file.name);
     if (!isImageMime && !isImageExt) {
-      return NextResponse.json({ error: `Apenas imagens são aceitas (tipo recebido: ${file.type})` }, { status: 400 });
+      return NextResponse.json(
+        { error: `Apenas imagens são aceitas (tipo recebido: "${file.type || "vazio"}", nome: "${file.name}")` },
+        { status: 400 }
+      );
     }
 
-    // Max 20MB
     if (file.size > 20 * 1024 * 1024) {
-      return NextResponse.json({ error: "Imagem muito grande (máx 20MB)" }, { status: 400 });
+      return NextResponse.json({ error: "Imagem muito grande (máx 20 MB)" }, { status: 400 });
     }
 
-    // Materialize the Next.js stream-backed File into an in-memory Blob so
-    // @fal-ai/client can use it as a fetch PUT body without stream-exhaustion errors.
-    // Usamos Blob e não File pois a classe File não é global em todos os runtimes da Vercel.
+    // Materialize stream-backed File into in-memory Blob before FAL upload.
+    // Next.js Route Handler File objects are backed by ReadableStream; passing them
+    // directly as a fetch PUT body can exhaust the stream mid-upload.
+    // Blob is always available in Node.js 18+ and Vercel's runtime.
     const arrayBuffer = await file.arrayBuffer();
     const mimeType    = file.type || "image/jpeg";
-    const staticBlob  = new Blob([arrayBuffer], { type: mimeType });
+    const blob        = new Blob([arrayBuffer], { type: mimeType });
 
-    const url = await fal.storage.upload(staticBlob);
+    const url = await fal.storage.upload(blob);
 
     return NextResponse.json({ url });
   } catch (error) {
-    console.error("[POST /api/upload]", error);
-    return NextResponse.json({ error: "Falha no upload" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[POST /api/upload] erro:", msg, error);
+    return NextResponse.json({ error: `Falha no upload: ${msg}` }, { status: 500 });
   }
 }
