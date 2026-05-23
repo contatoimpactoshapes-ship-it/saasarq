@@ -79,8 +79,9 @@ function WorkflowEditorInner() {
   const [lightboxUrl,  setLightboxUrl]  = useState<string | null>(null);
   const [editorUrl,    setEditorUrl]    = useState<string | null>(null);
 
-  const fileRef    = useRef<HTMLInputElement>(null);
-  const pollingRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+  const fileRef         = useRef<HTMLInputElement>(null);
+  const replaceTargetRef = useRef<string | null>(null);
+  const pollingRef      = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
 
   // ── Polling ────────────────────────────────────────────────────────────────
 
@@ -262,7 +263,52 @@ function WorkflowEditorInner() {
   // ── File upload ───────────────────────────────────────────────────────────
 
   const handleFiles = useCallback(async (files: FileList | null) => {
-    if (!files) return;
+    if (!files || files.length === 0) return;
+
+    // ── Replace mode: swap image in an existing source node ──────────────────
+    const replaceId = replaceTargetRef.current;
+    if (replaceId) {
+      replaceTargetRef.current = null;
+      const file = files[0];
+      const isImageMime = file.type.startsWith("image/");
+      const isImageExt  = /\.(jpg|jpeg|png|webp|gif)$/i.test(file.name);
+      if (!isImageMime && !isImageExt) { toast.error(`${file.name}: apenas imagens`); return; }
+      if (file.size > 20 * 1024 * 1024) { toast.error(`${file.name}: máx 20 MB`); return; }
+
+      const previewUrl = URL.createObjectURL(file);
+      const label      = file.name.replace(/\.[^/.]+$/, "");
+
+      setNodes((ns) => ns.map((n) => {
+        if (n.id !== replaceId) return n;
+        const d = n.data as unknown as ImageNodeData;
+        return { ...n, data: { ...d, label, previewUrl, falUrl: undefined, imageUrl: undefined, uploading: true, status: "pending" as NodeStatus } };
+      }));
+
+      (async () => {
+        try {
+          const fd = new FormData();
+          fd.append("file", file);
+          const res  = await fetch("/api/upload", { method: "POST", body: fd });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+          setNodes((ns) => ns.map((n) => {
+            if (n.id !== replaceId) return n;
+            const d = n.data as unknown as ImageNodeData;
+            return { ...n, data: { ...d, falUrl: data.url, uploading: false, status: "ready" as NodeStatus } };
+          }));
+        } catch (err) {
+          setNodes((ns) => ns.map((n) => {
+            if (n.id !== replaceId) return n;
+            const d = n.data as unknown as ImageNodeData;
+            return { ...n, data: { ...d, uploading: false, status: "failed" as NodeStatus, errorMessage: "Falha ao substituir" } };
+          }));
+          toast.error(`Falha ao substituir: ${err instanceof Error ? err.message : "Erro"}`);
+        }
+      })();
+      return;
+    }
+
+    // ── Add mode: create new source nodes ────────────────────────────────────
     const existing = nodes.filter((n) => {
       const d = n.data as unknown as ImageNodeData;
       return d.nodeKind === "source";
@@ -288,7 +334,6 @@ function WorkflowEditorInner() {
       };
       setNodes((ns) => [...ns, newNode]);
 
-      // Upload async
       (async () => {
         try {
           const fd = new FormData();
@@ -400,7 +445,10 @@ function WorkflowEditorInner() {
     });
   }, [setNodes]);
 
-  const ctxReplace      = useCallback(() => fileRef.current?.click(), []);
+  const ctxReplace = useCallback((id: string) => {
+    replaceTargetRef.current = id;
+    fileRef.current?.click();
+  }, []);
   const ctxMoveToFolder = useCallback((_id: string) => toast.info("Em breve: mover para pasta"), []);
   const ctxFindSimilar  = useCallback((_id: string) => toast.info("Em breve: similares"), []);
   const ctxHistory      = useCallback((_id: string) => toast.info("Em breve: histórico"), []);
