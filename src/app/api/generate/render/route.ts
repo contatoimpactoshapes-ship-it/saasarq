@@ -16,7 +16,17 @@ const renderSchema = z.object({
   style:        z.string().default("exterior-day"),
   strength:     z.number().min(0.1).max(0.99).default(0.85),
   renderModel:  z.string().default("render-flux-dev"),
+  aspectRatio:  z.string().default("1:1"),
 });
+
+const AR_SIZE: Record<string, string | { width: number; height: number }> = {
+  "1:1":  "square_hd",
+  "16:9": "landscape_16_9",
+  "9:16": "portrait_16_9",
+  "4:5":  { width: 820, height: 1024 },
+  "3:2":  { width: 1024, height: 682 },
+  "2:3":  { width: 682, height: 1024 },
+};
 
 // Style → base prompt mapping
 // Each prompt is engineered to convert a raw 3D model export into a photorealistic architectural render
@@ -58,7 +68,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { imageUrl, prompt, style, strength, renderModel } = parsed.data;
+    const { imageUrl, prompt, style, strength, renderModel, aspectRatio } = parsed.data;
 
     const clerkUser = await currentUser();
     const email = clerkUser?.emailAddresses[0]?.emailAddress ?? "";
@@ -150,6 +160,7 @@ export async function POST(req: NextRequest) {
             num_inference_steps: 40,
             guidance_scale:      3.5,
             num_images:          1,
+            image_size:          AR_SIZE[aspectRatio] ?? "square_hd",
           };
       }
     };
@@ -160,7 +171,7 @@ export async function POST(req: NextRequest) {
         tool:        "IMAGE_EDIT",
         model:       renderModel,
         prompt:      finalPrompt,
-        parameters:  { sourceUrl: imageUrl, style, strength },
+        parameters:  { sourceUrl: imageUrl, style, strength, aspectRatio },
         status:      "PENDING",
         outputUrls:  [],
         creditsCost: CREDIT_COST,

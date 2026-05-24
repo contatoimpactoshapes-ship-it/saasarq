@@ -24,9 +24,13 @@ export interface ImageNodeData extends Record<string, unknown> {
   falUrl?:       string;
   status?:       NodeStatus;
   uploading?:    boolean;
-  prompt?:       string;
+  prompt?:       string;       // per-image prompt (edited in sidebar contextual panel)
+  aspectRatio?:  string;       // per-image aspect ratio — "1:1" | "16:9" | "9:16" | "4:5" | "3:2" | "2:3"
+  nodeModel?:    string;       // per-image model override
+  nodeStrength?: number;       // per-image strength override
+  nodeOutputs?:  number;       // per-image variations override
   errorMessage?: string;
-  generationId?: string;   // DB generation id — used to resume polling after page restore
+  generationId?: string;       // DB generation id — used to resume polling after page restore
 }
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -147,31 +151,21 @@ function ImageNodeComponent({ data, selected }: NodeProps) {
           )}
         </div>
 
-        {/* ── Per-image prompt (source nodes only) ── */}
-        {isSource && (
-          <div
-            className="px-2.5 pt-1.5 pb-1 border-t border-gray-100 nodrag nopan"
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <textarea
-              value={d.prompt ?? ""}
-              onChange={(e) => actions.onUpdatePrompt(d.nodeId, e.target.value)}
-              onMouseDown={(e) => e.stopPropagation()}
-              placeholder="Prompt desta imagem..."
-              rows={2}
-              className="w-full text-[10px] text-gray-600 placeholder:text-gray-300
-                bg-transparent border-0 outline-none resize-none leading-relaxed
-                focus:ring-0 nodrag nopan"
-            />
-          </div>
-        )}
-
         {/* ── Footer ── */}
         <div className="px-3 py-2 flex items-center gap-1.5 border-t border-gray-100">
           <p className="text-[10px] text-gray-400 truncate flex-1 font-medium" title={d.label ?? d.prompt}>
             {d.label ?? d.prompt?.slice(0, 30) ?? (isSource ? "imagem" : "render")}
           </p>
+          {/* Prompt indicator badge (source only) */}
+          {isSource && !d.uploading && (
+            <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
+              d.prompt?.trim()
+                ? "bg-orange-50 text-orange-400"
+                : "bg-gray-100 text-gray-300"
+            }`}>
+              {d.prompt?.trim() ? "P" : "G"}
+            </span>
+          )}
           {/* Quick actions */}
           {!d.uploading && (
             <div className="flex items-center gap-0.5 shrink-0">

@@ -20,7 +20,7 @@ import { sanitizeError } from "@/lib/errors";
 
 import { ImageNode, ImageNodeData, NodeStatus } from "./nodes/ImageNode";
 import { ContextMenu, ContextMenuState } from "./ContextMenu";
-import { WorkflowSidebar } from "./WorkflowSidebar";
+import { WorkflowSidebar, SelectedSourceInfo } from "./WorkflowSidebar";
 import { WorkflowContext } from "./WorkflowContext";
 import { useGenerationStore } from "@/stores/useGenerationStore";
 import { useCreditsStore } from "@/stores/useCreditsStore";
@@ -336,7 +336,14 @@ function WorkflowEditorInner() {
       return;
     }
 
-    const cost = RENDER_CREDITS * numOutputs;
+    // Per-image overrides with global fallbacks
+    const effectiveModel   = sd.nodeModel    ?? renderModel;
+    const effectiveStren   = sd.nodeStrength ?? strength;
+    const effectiveOutputs = sd.nodeOutputs  ?? numOutputs;
+    const effectiveAspect  = sd.aspectRatio  ?? "1:1";
+    const effectivePrompt  = sd.prompt?.trim() || globalPrompt || sd.label || "";
+
+    const cost = RENDER_CREDITS * effectiveOutputs;
     if (credits < cost) {
       toast.error(`Créditos insuficientes: precisa de ${cost} cr`);
       return;
@@ -346,12 +353,10 @@ function WorkflowEditorInner() {
 
     const existingRenderCount = edges.filter((e) => e.source === sourceNodeId).length;
 
-    for (let i = 0; i < numOutputs; i++) {
+    for (let i = 0; i < effectiveOutputs; i++) {
       const renderNodeId = `rn-${Date.now()}-${sourceNodeId}-${i}`;
       const optId        = `opt-${Date.now()}-${i}`;
       setActiveJobs((n) => n + 1);
-
-      const effectivePrompt = sd.prompt?.trim() || globalPrompt || sd.label || "";
 
       const newNode: Node = {
         id:   renderNodeId,
@@ -371,7 +376,7 @@ function WorkflowEditorInner() {
       setEdges((es) => [...es, makeEdge(sourceNodeId, renderNodeId)]);
 
       addGeneration({
-        id: optId, tool: "IMAGE_EDIT", model: renderModel,
+        id: optId, tool: "IMAGE_EDIT", model: effectiveModel,
         prompt: effectivePrompt,
         status: "PENDING", outputUrls: [], creditsCost: RENDER_CREDITS,
         createdAt: new Date().toISOString(),
@@ -382,10 +387,12 @@ function WorkflowEditorInner() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            imageUrl: sd.falUrl,
-            prompt:   effectivePrompt,
-            style:    "custom",
-            strength, renderModel,
+            imageUrl:    sd.falUrl,
+            prompt:      effectivePrompt,
+            style:       "custom",
+            strength:    effectiveStren,
+            renderModel: effectiveModel,
+            aspectRatio: effectiveAspect,
           }),
         });
         const result = await res.json();
@@ -413,7 +420,7 @@ function WorkflowEditorInner() {
     }
   }, [nodes, edges, numOutputs, credits, globalPrompt, renderModel, strength,
       decrementCredits, addGeneration, updateGeneration, refreshCredits,
-      startPoll, setNodes, setEdges]);
+      startPoll, setNodes, setEdges, getNode]);
 
   // ── Render all ────────────────────────────────────────────────────────────
 
@@ -681,7 +688,18 @@ function WorkflowEditorInner() {
     setEdges((es) => es.filter((e) => e.source !== id && e.target !== id));
   }, [setEdges]);
 
-  // ── Counts ────────────────────────────────────────────────────────────────
+  // ── Update selected source node ──────────────────────────────────────────
+
+  const onUpdateSourceNode = useCallback((patch: Partial<ImageNodeData>) => {
+    setNodes((ns) => ns.map((n) => {
+      if (!n.selected) return n;
+      const d = n.data as unknown as ImageNodeData;
+      if (d.nodeKind !== "source") return n;
+      return { ...n, data: { ...d, ...patch } };
+    }));
+  }, [setNodes]);
+
+  // ── Counts & selected source ──────────────────────────────────────────────
 
   const sourceCount = nodes.filter((n) => {
     const d = n.data as unknown as ImageNodeData;
@@ -692,6 +710,31 @@ function WorkflowEditorInner() {
     const d = n.data as unknown as ImageNodeData;
     return d.nodeKind === "source" && d.falUrl && !d.uploading;
   }).length;
+
+  const selectedSourceNode = nodes.find((n) => {
+    if (!n.selected) return false;
+    const d = n.data as unknown as ImageNodeData;
+    return d.nodeKind === "source";
+  }) ?? null;
+
+  const selectedSource: SelectedSourceInfo | null = selectedSourceNode
+    ? (() => {
+      const d = selectedSourceNode.data as unknown as ImageNodeData;
+      return {
+        nodeId:       selectedSourceNode.id,
+        label:        d.label,
+        displayUrl:   d.imageUrl || d.falUrl || d.previewUrl,
+        falUrl:       d.falUrl,
+        status:       d.status,
+        uploading:    d.uploading,
+        prompt:       d.prompt,
+        aspectRatio:  d.aspectRatio,
+        nodeModel:    d.nodeModel,
+        nodeStrength: d.nodeStrength,
+        nodeOutputs:  d.nodeOutputs,
+      };
+    })()
+    : null;
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -726,6 +769,11 @@ function WorkflowEditorInner() {
         onUpload={() => fileRef.current?.click()}
         nodeCount={sourceCount}
         saveStatus={saveStatus}
+        selectedSource={selectedSource}
+        onUpdateSource={(patch) => onUpdateSourceNode(patch as Partial<ImageNodeData>)}
+        onRenderSource={() => selectedSourceNode && executeRender(selectedSourceNode.id)}
+        onReplaceSource={() => selectedSourceNode && ctxReplace(selectedSourceNode.id)}
+        onDeleteSource={() => selectedSourceNode && ctxDelete(selectedSourceNode.id)}
       />
 
       {/* Canvas */}
