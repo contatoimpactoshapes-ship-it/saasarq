@@ -26,6 +26,23 @@ import { useGenerationStore } from "@/stores/useGenerationStore";
 import { useCreditsStore } from "@/stores/useCreditsStore";
 import { ImageEditor } from "@/components/tools/ImageEditor";
 
+// ── Persistence types ────────────────────────────────────────────────────────
+
+interface WorkflowSettings {
+  globalPrompt: string;
+  renderModel:  string;
+  strength:     number;
+  numOutputs:   number;
+}
+
+interface WorkflowCanvasData {
+  version:  1;
+  nodes:    Node[];
+  edges:    Edge[];
+  viewport: { x: number; y: number; zoom: number };
+  settings: WorkflowSettings;
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const POLL_INTERVAL  = 2000;
@@ -62,7 +79,7 @@ function downloadUrl(url: string, filename = "render.png") {
 // ── Inner component ───────────────────────────────────────────────────────────
 
 function WorkflowEditorInner() {
-  const { fitView } = useReactFlow();
+  const { fitView, setViewport, getViewport } = useReactFlow();
 
   const { addGeneration, updateGeneration } = useGenerationStore();
   const { credits, decrementCredits, refreshCredits } = useCreditsStore();
@@ -76,13 +93,27 @@ function WorkflowEditorInner() {
   const [numOutputs,   setNumOutputs]   = useState(1);
 
   const [activeJobs, setActiveJobs] = useState(0);
+
+  // ── Persistence state ────────────────────────────────────────────────────
+  const [spaceId,     setSpaceId]     = useState<string | null>(null);
+  const [saveStatus,  setSaveStatus]  = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [isRestoring, setIsRestoring] = useState(true);
+
   const [contextMenu,  setContextMenu]  = useState<ContextMenuState | null>(null);
   const [lightboxUrl,  setLightboxUrl]  = useState<string | null>(null);
   const [editorUrl,    setEditorUrl]    = useState<string | null>(null);
 
-  const fileRef         = useRef<HTMLInputElement>(null);
+  const fileRef          = useRef<HTMLInputElement>(null);
   const replaceTargetRef = useRef<string | null>(null);
-  const pollingRef      = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+  const pollingRef       = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+
+  // ── Persistence refs ──────────────────────────────────────────────────────
+  const spaceIdRef      = useRef<string | null>(null);
+  const saveTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasRestoredRef  = useRef(false);
+  const saveStateRef    = useRef<WorkflowSettings & { nodes: Node[]; edges: Edge[] }>({
+    nodes: [], edges: [], globalPrompt: "", renderModel: "render-flux-dev", strength: 0.82, numOutputs: 1,
+  });
 
   // ── Polling ────────────────────────────────────────────────────────────────
 
@@ -135,6 +166,140 @@ function WorkflowEditorInner() {
     }, POLL_INTERVAL);
     pollingRef.current.set(genId, iv);
   }, [stopPoll, updateGeneration, refreshCredits, setNodes]);
+
+  // ── Auto-save: keep saveStateRef current ─────────────────────────────────
+
+  useEffect(() => {
+    saveStateRef.current = { nodes, edges, globalPrompt, renderModel, strength, numOutputs };
+  }, [nodes, edges, globalPrompt, renderModel, strength, numOutputs]);
+
+  // ── scheduleSave: debounced write to Space.canvasData ─────────────────────
+
+  const scheduleSave = useCallback(() => {
+    if (!spaceIdRef.current) return;
+    setSaveStatus("saving");
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        const { nodes: ns, edges: es, globalPrompt: gp, renderModel: rm, strength: st, numOutputs: no } = saveStateRef.current;
+        const viewport = getViewport();
+
+        // Strip ephemeral previewUrl (blob:) and mark interrupted uploads as failed
+        const cleanNodes = ns.map((n) => {
+          const d = n.data as unknown as ImageNodeData;
+          const rest = (({ previewUrl: _, ...r }) => r)(d);
+          if (rest.uploading) {
+            return { ...n, data: { ...rest, uploading: false, status: "failed" as NodeStatus, errorMessage: "Upload interrompido" } };
+          }
+          return { ...n, data: rest };
+        });
+
+        const canvasData: WorkflowCanvasData = {
+          version:  1,
+          nodes:    cleanNodes,
+          edges:    es,
+          viewport,
+          settings: { globalPrompt: gp, renderModel: rm, strength: st, numOutputs: no },
+        };
+
+        const res = await fetch(`/api/spaces/${spaceIdRef.current}`, {
+          method:  "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ canvasData }),
+        });
+
+        setSaveStatus(res.ok ? "saved" : "error");
+        if (!res.ok) console.error("[WorkflowEditor] save failed", await res.text());
+      } catch (err) {
+        console.error("[WorkflowEditor] save error", err);
+        setSaveStatus("error");
+      }
+      // Auto-clear "saved" badge after 2 s
+      setTimeout(() => setSaveStatus((s) => (s === "saved" ? "idle" : s)), 2000);
+    }, 1500);
+  }, [getViewport]);
+
+  // ── Auto-save trigger on any canvas change ────────────────────────────────
+
+  useEffect(() => {
+    if (isRestoring || !spaceId) return;
+    scheduleSave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, edges, globalPrompt, renderModel, strength, numOutputs]);
+
+  // ── Restore workflow from Space on mount ──────────────────────────────────
+
+  useEffect(() => {
+    if (hasRestoredRef.current) return;
+    hasRestoredRef.current = true;
+
+    async function restore() {
+      try {
+        let sid = typeof window !== "undefined" ? localStorage.getItem("workflowSpaceId") : null;
+
+        if (sid) {
+          const res = await fetch(`/api/spaces/${sid}`);
+          if (res.ok) {
+            const space  = await res.json();
+            const canvas = space.canvasData as WorkflowCanvasData | null;
+
+            if (canvas?.version === 1) {
+              // Restore sidebar settings
+              if (canvas.settings) {
+                setGlobalPrompt(canvas.settings.globalPrompt ?? "");
+                setRenderModel(canvas.settings.renderModel ?? "render-flux-dev");
+                setStrength(canvas.settings.strength ?? 0.82);
+                setNumOutputs(canvas.settings.numOutputs ?? 1);
+              }
+              // Restore canvas nodes and edges
+              if (canvas.nodes?.length)  setNodes(canvas.nodes as Node[]);
+              if (canvas.edges?.length)  setEdges(canvas.edges as Edge[]);
+              // Restore viewport after ReactFlow has rendered the nodes
+              if (canvas.viewport) {
+                setTimeout(() => setViewport(canvas.viewport), 120);
+              }
+              // Resume polling for any generation still in-progress
+              for (const node of (canvas.nodes ?? [])) {
+                const d = node.data as unknown as ImageNodeData;
+                if ((d.status === "processing" || d.status === "pending") && d.generationId) {
+                  startPoll(d.generationId, node.id);
+                }
+              }
+            }
+          } else {
+            // Space not found in DB — start fresh
+            localStorage.removeItem("workflowSpaceId");
+            sid = null;
+          }
+        }
+
+        if (!sid) {
+          // First visit — create a persistent Space for this user
+          const res = await fetch("/api/spaces", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ name: "Workflow" }),
+          });
+          if (res.ok) {
+            const space = await res.json();
+            localStorage.setItem("workflowSpaceId", space.id);
+            sid = space.id;
+          }
+        }
+
+        spaceIdRef.current = sid;
+        setSpaceId(sid);
+      } catch (err) {
+        console.error("[WorkflowEditor] restore failed", err);
+      } finally {
+        setIsRestoring(false);
+      }
+    }
+
+    restore();
+    // startPoll is stable (its deps are stable Zustand methods + setNodes from ReactFlow)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Node data builders ────────────────────────────────────────────────────
 
@@ -230,7 +395,7 @@ function WorkflowEditorInner() {
         setNodes((ns) => ns.map((n) => {
           if (n.id !== renderNodeId) return n;
           const d = n.data as unknown as ImageNodeData;
-          return { ...n, data: { ...d, status: "processing" as NodeStatus } };
+          return { ...n, data: { ...d, status: "processing" as NodeStatus, generationId: result.generationId } };
         }));
         startPoll(result.generationId, renderNodeId);
       } catch (err) {
@@ -548,6 +713,7 @@ function WorkflowEditorInner() {
         onRenderAll={handleRenderAll}
         onUpload={() => fileRef.current?.click()}
         nodeCount={sourceCount}
+        saveStatus={saveStatus}
       />
 
       {/* Canvas */}
@@ -556,6 +722,15 @@ function WorkflowEditorInner() {
         onDrop={(e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
         onDragOver={(e) => e.preventDefault()}
       >
+        {/* Restore overlay — covers canvas only while loading from DB */}
+        {isRestoring && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#f5f6fa]/80 backdrop-blur-[2px]">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 rounded-full border-2 border-[var(--color-brand)]/30 border-t-[var(--color-brand)] animate-spin" />
+              <span className="text-xs text-gray-400 font-medium">Carregando workspace...</span>
+            </div>
+          </div>
+        )}
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -596,8 +771,8 @@ function WorkflowEditorInner() {
             maskColor="rgba(245,246,250,0.8)"
           />
 
-          {/* Empty state */}
-          {nodes.length === 0 && (
+          {/* Empty state — hidden during restore to avoid flashing before nodes load */}
+          {nodes.length === 0 && !isRestoring && (
             <Panel position="top-center">
               <div className="mt-20 flex flex-col items-center gap-4 pointer-events-none select-none">
                 <div className="w-16 h-16 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center justify-center">

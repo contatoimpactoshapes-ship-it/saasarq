@@ -26,6 +26,7 @@ export interface ImageNodeData extends Record<string, unknown> {
   uploading?:    boolean;
   prompt?:       string;
   errorMessage?: string;
+  generationId?: string;   // DB generation id — used to resume polling after page restore
 }
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -55,7 +56,8 @@ function ImageNodeComponent({ data, selected }: NodeProps) {
 
   const isSource     = d.nodeKind === "source";
   const status       = d.status ?? (d.falUrl && !d.uploading ? "ready" : "pending");
-  const displayUrl   = d.imageUrl || d.previewUrl || "";
+  // falUrl is a valid CDN URL and acts as fallback when previewUrl (blob:) is absent after page restore
+  const displayUrl   = d.imageUrl || d.previewUrl || d.falUrl || "";
   const isCompleted  = status === "completed" || status === "ready";
   const isProcessing = status === "processing";
   const isFailed     = status === "failed";

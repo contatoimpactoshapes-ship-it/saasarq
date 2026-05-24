@@ -39,6 +39,7 @@ interface Props {
   onRenderAll: () => void;
   onUpload: () => void;
   nodeCount: number;
+  saveStatus: "idle" | "saving" | "saved" | "error";
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -50,7 +51,7 @@ export function WorkflowSidebar({
   numOutputs, onNumOutputsChange,
   isGenerating, readyCount,
   onRenderAll, onUpload,
-  nodeCount,
+  nodeCount, saveStatus,
 }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const currentModel = RENDER_AI_MODELS.find((m) => m.id === model) ?? RENDER_AI_MODELS[0];
@@ -100,10 +101,19 @@ export function WorkflowSidebar({
       {!collapsed && (
         <div className="flex flex-col h-full overflow-hidden">
           {/* Header */}
-          <div className="px-4 py-3 border-b border-[var(--border-subtle)]">
+          <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
             <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest">
               Workflow · 3D → Render
             </p>
+            {saveStatus === "saving" && (
+              <span className="text-[9px] text-gray-400 shrink-0">Salvando...</span>
+            )}
+            {saveStatus === "saved" && (
+              <span className="text-[9px] text-emerald-500 font-medium shrink-0">Salvo ✓</span>
+            )}
+            {saveStatus === "error" && (
+              <span className="text-[9px] text-red-400 shrink-0">Erro ao salvar</span>
+            )}
           </div>
 
           {/* Scrollable */}
