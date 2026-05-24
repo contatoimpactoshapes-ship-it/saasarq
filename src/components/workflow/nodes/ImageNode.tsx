@@ -151,11 +151,13 @@ function ImageNodeComponent({ data, selected }: NodeProps) {
         {isSource && (
           <div
             className="px-2.5 pt-1.5 pb-1 border-t border-gray-100 nodrag nopan"
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
             <textarea
               value={d.prompt ?? ""}
               onChange={(e) => actions.onUpdatePrompt(d.nodeId, e.target.value)}
+              onMouseDown={(e) => e.stopPropagation()}
               placeholder="Prompt desta imagem..."
               rows={2}
               className="w-full text-[10px] text-gray-600 placeholder:text-gray-300

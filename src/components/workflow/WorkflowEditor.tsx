@@ -80,7 +80,7 @@ function downloadUrl(url: string, filename = "render.png") {
 // ── Inner component ───────────────────────────────────────────────────────────
 
 function WorkflowEditorInner() {
-  const { fitView, setViewport, getViewport } = useReactFlow();
+  const { fitView, setViewport, getViewport, getNode } = useReactFlow();
 
   const { addGeneration, updateGeneration } = useGenerationStore();
   const { credits, decrementCredits, refreshCredits } = useCreditsStore();
@@ -327,7 +327,8 @@ function WorkflowEditorInner() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const executeRender = useCallback(async (sourceNodeId: string) => {
-    const sourceNode = nodes.find((n) => n.id === sourceNodeId);
+    // getNode reads from the live ReactFlow store — never stale, unlike the nodes closure
+    const sourceNode = getNode(sourceNodeId);
     if (!sourceNode) return;
     const sd = sourceNode.data as unknown as ImageNodeData;
     if (!sd.falUrl || sd.uploading) {
