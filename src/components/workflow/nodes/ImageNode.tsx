@@ -147,8 +147,26 @@ function ImageNodeComponent({ data, selected }: NodeProps) {
           )}
         </div>
 
+        {/* ── Per-image prompt (source nodes only) ── */}
+        {isSource && (
+          <div
+            className="px-2.5 pt-1.5 pb-1 border-t border-gray-100 nodrag nopan"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <textarea
+              value={d.prompt ?? ""}
+              onChange={(e) => actions.onUpdatePrompt(d.nodeId, e.target.value)}
+              placeholder="Prompt desta imagem..."
+              rows={2}
+              className="w-full text-[10px] text-gray-600 placeholder:text-gray-300
+                bg-transparent border-0 outline-none resize-none leading-relaxed
+                focus:ring-0 nodrag nopan"
+            />
+          </div>
+        )}
+
         {/* ── Footer ── */}
-        <div className="px-3 py-2 flex items-center gap-1.5">
+        <div className="px-3 py-2 flex items-center gap-1.5 border-t border-gray-100">
           <p className="text-[10px] text-gray-400 truncate flex-1 font-medium" title={d.label ?? d.prompt}>
             {d.label ?? d.prompt?.slice(0, 30) ?? (isSource ? "imagem" : "render")}
           </p>

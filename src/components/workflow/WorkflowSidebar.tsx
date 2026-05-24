@@ -139,18 +139,21 @@ export function WorkflowSidebar({
             </Section>
 
             {/* ── Prompt ── */}
-            <Section icon={<Settings2 className="w-3.5 h-3.5" />} title="Prompt global">
+            <Section icon={<Settings2 className="w-3.5 h-3.5" />} title="Prompt Global (fallback)">
               <textarea
                 value={prompt}
                 onChange={(e) => onPromptChange(e.target.value)}
-                placeholder={"Deixe vazio para prompt individual de cada nó...\n\nEx: Fotografia hiper-realista, iluminação natural suave"}
-                rows={5}
+                placeholder={"Ex: Fotografia hiper-realista, iluminação natural suave"}
+                rows={4}
                 disabled={isGenerating}
                 className="w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2.5
                   text-[11px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none
                   focus:border-[var(--color-brand)] resize-none transition-colors
                   leading-relaxed disabled:opacity-40 scrollbar-thin"
               />
+              <p className="text-[9px] text-[var(--text-muted)] mt-1 px-0.5 leading-relaxed">
+                Usado apenas quando a imagem não tem prompt próprio.
+              </p>
             </Section>
 
             {/* ── Model ── */}

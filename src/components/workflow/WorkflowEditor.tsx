@@ -350,6 +350,8 @@ function WorkflowEditorInner() {
       const optId        = `opt-${Date.now()}-${i}`;
       setActiveJobs((n) => n + 1);
 
+      const effectivePrompt = sd.prompt?.trim() || globalPrompt || sd.label || "";
+
       const newNode: Node = {
         id:   renderNodeId,
         type: "imageNode",
@@ -359,7 +361,7 @@ function WorkflowEditorInner() {
         },
         data: buildRenderData(renderNodeId, {
           status:  "pending",
-          prompt:  globalPrompt || sd.label,
+          prompt:  effectivePrompt,
           label:   `Variação ${existingRenderCount + i + 1}`,
         }),
       };
@@ -369,7 +371,7 @@ function WorkflowEditorInner() {
 
       addGeneration({
         id: optId, tool: "IMAGE_EDIT", model: renderModel,
-        prompt: globalPrompt || (sd.label ?? ""),
+        prompt: effectivePrompt,
         status: "PENDING", outputUrls: [], creditsCost: RENDER_CREDITS,
         createdAt: new Date().toISOString(),
       });
@@ -380,7 +382,7 @@ function WorkflowEditorInner() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             imageUrl: sd.falUrl,
-            prompt:   globalPrompt || sd.label,
+            prompt:   effectivePrompt,
             style:    "custom",
             strength, renderModel,
           }),
@@ -621,6 +623,15 @@ function WorkflowEditorInner() {
     replaceTargetRef.current = id;
     fileRef.current?.click();
   }, []);
+
+  const ctxUpdatePrompt = useCallback((id: string, prompt: string) => {
+    setNodes((ns) => ns.map((n) => {
+      if (n.id !== id) return n;
+      const d = n.data as unknown as ImageNodeData;
+      return { ...n, data: { ...d, prompt } };
+    }));
+  }, [setNodes]);
+
   const ctxMoveToFolder = useCallback((_id: string) => toast.info("Em breve: mover para pasta"), []);
   const ctxFindSimilar  = useCallback((_id: string) => toast.info("Em breve: similares"), []);
   const ctxHistory      = useCallback((_id: string) => toast.info("Em breve: histórico"), []);
@@ -696,6 +707,7 @@ function WorkflowEditorInner() {
     onMoveToFolder: ctxMoveToFolder,
     onFindSimilar:  ctxFindSimilar,
     onHistory:      ctxHistory,
+    onUpdatePrompt: ctxUpdatePrompt,
   };
 
   return (
