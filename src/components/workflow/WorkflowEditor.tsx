@@ -428,13 +428,14 @@ function WorkflowEditorInner() {
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);          // capture before input reset
     if (fileRef.current) fileRef.current.value = "";
 
     // ── Replace mode: swap image in an existing source node ──────────────────
     const replaceId = replaceTargetRef.current;
     if (replaceId) {
       replaceTargetRef.current = null;
-      const file = files[0];
+      const file = fileArray[0];
       const isImageMime = file.type.startsWith("image/");
       const isImageExt  = /\.(jpg|jpeg|png|webp|gif)$/i.test(file.name);
       if (!isImageMime && !isImageExt) { toast.error(`${file.name}: apenas imagens`); return; }
@@ -480,8 +481,8 @@ function WorkflowEditorInner() {
       return d.nodeKind === "source";
     }).length;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
       const isImageMime = file.type.startsWith("image/");
       const isImageExt  = /\.(jpg|jpeg|png|webp|gif)$/i.test(file.name);
       if (!isImageMime && !isImageExt) { toast.error(`${file.name}: apenas imagens`); continue; }
