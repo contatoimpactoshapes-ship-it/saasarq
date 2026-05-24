@@ -49,6 +49,7 @@ const POLL_INTERVAL  = 2000;
 const RENDER_CREDITS = 120;
 const SOURCE_X       = 80;
 const RENDER_X       = 400;
+const RENDER_STEP_X  = 260;
 const NODE_STEP_Y    = 260;
 
 // ── Node type registry (single unified type) ──────────────────────────────────
@@ -349,16 +350,12 @@ function WorkflowEditorInner() {
       const optId        = `opt-${Date.now()}-${i}`;
       setActiveJobs((n) => n + 1);
 
-      // Position: stack to the right, offset vertically
-      const col = Math.floor(i / 4);
-      const row = existingRenderCount + i;
-
       const newNode: Node = {
         id:   renderNodeId,
         type: "imageNode",
         position: {
-          x: RENDER_X + col * 240,
-          y: sourceNode.position.y + (row % 4) * NODE_STEP_Y,
+          x: RENDER_X + (existingRenderCount + i) * RENDER_STEP_X,
+          y: sourceNode.position.y,
         },
         data: buildRenderData(renderNodeId, {
           status:  "pending",
@@ -431,6 +428,7 @@ function WorkflowEditorInner() {
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    if (fileRef.current) fileRef.current.value = "";
 
     // ── Replace mode: swap image in an existing source node ──────────────────
     const replaceId = replaceTargetRef.current;
