@@ -314,10 +314,8 @@ export default function SpaceDetailPage() {
     }
   }
 
-  function handleOpenWorkflow() {
-    // Set the active space so WorkflowEditor picks it up from localStorage on next load
-    localStorage.setItem("workflowSpaceId", spaceId);
-    router.push("/app/ai-image-generator?mode=render3d");
+  function handleOpenWorkflow(wfId: string) {
+    router.push(`/app/spaces/${spaceId}/canvas/${wfId}`);
   }
 
   // ── Render states ────────────────────────────────────────────────────────────
@@ -444,7 +442,7 @@ export default function SpaceDetailPage() {
                 onStartDelete={() => { setDeleteWfId(wf.id); setEditingWfId(null); }}
                 onConfirmDelete={() => handleDeleteWorkflow(wf.id)}
                 onCancelDelete={() => setDeleteWfId(null)}
-                onOpen={handleOpenWorkflow}
+                onOpen={() => handleOpenWorkflow(wf.id)}
               />
             ))}
 

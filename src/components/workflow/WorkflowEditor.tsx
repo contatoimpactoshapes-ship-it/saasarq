@@ -79,7 +79,13 @@ function downloadUrl(url: string, filename = "render.png") {
 
 // ── Inner component ───────────────────────────────────────────────────────────
 
-function WorkflowEditorInner() {
+function WorkflowEditorInner({
+  spaceId:    propSpaceId,
+  workflowId: propWorkflowId,
+}: {
+  spaceId?:    string;
+  workflowId?: string;
+}) {
   const { fitView, setViewport, getViewport, getNode } = useReactFlow();
 
   const { addGeneration, updateGeneration } = useGenerationStore();
@@ -110,6 +116,7 @@ function WorkflowEditorInner() {
 
   // ── Persistence refs ──────────────────────────────────────────────────────
   const spaceIdRef      = useRef<string | null>(null);
+  const workflowIdRef   = useRef<string | null>(null);
   const saveTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasRestoredRef  = useRef(false);
   const saveStateRef    = useRef<WorkflowSettings & { nodes: Node[]; edges: Edge[] }>({
@@ -195,13 +202,19 @@ function WorkflowEditorInner() {
           return { ...n, data: rest };
         });
 
-        const canvasData: WorkflowCanvasData = {
+        const canvasPayload: WorkflowCanvasData = {
           version:  1,
           nodes:    cleanNodes,
           edges:    es,
           viewport,
           settings: { globalPrompt: gp, renderModel: rm, strength: st, numOutputs: no },
         };
+
+        // Workflow mode: isolate under "canvas:wfId" key (shallow merge preserves other workflows)
+        // Legacy mode: save at root level for backward compat
+        const canvasData = workflowIdRef.current
+          ? { [`canvas:${workflowIdRef.current}`]: canvasPayload }
+          : (canvasPayload as unknown as Record<string, unknown>);
 
         const res = await fetch(`/api/spaces/${spaceIdRef.current}`, {
           method:  "PATCH",
@@ -234,62 +247,73 @@ function WorkflowEditorInner() {
     if (hasRestoredRef.current) return;
     hasRestoredRef.current = true;
 
+    async function restoreCanvas(canvas: WorkflowCanvasData) {
+      if (canvas.settings) {
+        setGlobalPrompt(canvas.settings.globalPrompt ?? "");
+        setRenderModel(canvas.settings.renderModel ?? "render-flux-dev");
+        setStrength(canvas.settings.strength ?? 0.82);
+        setNumOutputs(canvas.settings.numOutputs ?? 1);
+      }
+      if (canvas.nodes?.length)  setNodes(canvas.nodes as Node[]);
+      if (canvas.edges?.length)  setEdges(canvas.edges as Edge[]);
+      if (canvas.viewport) {
+        setTimeout(() => setViewport(canvas.viewport), 120);
+      }
+      for (const node of (canvas.nodes ?? [])) {
+        const d = node.data as unknown as ImageNodeData;
+        if ((d.status === "processing" || d.status === "pending") && d.generationId) {
+          startPoll(d.generationId, node.id);
+        }
+      }
+    }
+
     async function restore() {
       try {
-        let sid = typeof window !== "undefined" ? localStorage.getItem("workflowSpaceId") : null;
-
-        if (sid) {
-          const res = await fetch(`/api/spaces/${sid}`);
+        if (propSpaceId && propWorkflowId) {
+          // ── Workflow mode: load canvas isolated by workflowId ──────────────
+          const res = await fetch(`/api/spaces/${propSpaceId}`);
           if (res.ok) {
-            const space  = await res.json();
-            const canvas = space.canvasData as WorkflowCanvasData | null;
+            const space     = await res.json();
+            const canvasKey = `canvas:${propWorkflowId}`;
+            const raw       = ((space.canvasData ?? {}) as Record<string, unknown>)[canvasKey];
+            const canvas    = raw as WorkflowCanvasData | null;
+            if (canvas?.version === 1) await restoreCanvas(canvas);
+          }
+          spaceIdRef.current    = propSpaceId;
+          workflowIdRef.current = propWorkflowId;
+          setSpaceId(propSpaceId);
+        } else {
+          // ── Legacy mode: localStorage-based (used by ai-image-generator) ──
+          let sid = typeof window !== "undefined" ? localStorage.getItem("workflowSpaceId") : null;
 
-            if (canvas?.version === 1) {
-              // Restore sidebar settings
-              if (canvas.settings) {
-                setGlobalPrompt(canvas.settings.globalPrompt ?? "");
-                setRenderModel(canvas.settings.renderModel ?? "render-flux-dev");
-                setStrength(canvas.settings.strength ?? 0.82);
-                setNumOutputs(canvas.settings.numOutputs ?? 1);
-              }
-              // Restore canvas nodes and edges
-              if (canvas.nodes?.length)  setNodes(canvas.nodes as Node[]);
-              if (canvas.edges?.length)  setEdges(canvas.edges as Edge[]);
-              // Restore viewport after ReactFlow has rendered the nodes
-              if (canvas.viewport) {
-                setTimeout(() => setViewport(canvas.viewport), 120);
-              }
-              // Resume polling for any generation still in-progress
-              for (const node of (canvas.nodes ?? [])) {
-                const d = node.data as unknown as ImageNodeData;
-                if ((d.status === "processing" || d.status === "pending") && d.generationId) {
-                  startPoll(d.generationId, node.id);
-                }
-              }
+          if (sid) {
+            const res = await fetch(`/api/spaces/${sid}`);
+            if (res.ok) {
+              const space  = await res.json();
+              const canvas = space.canvasData as WorkflowCanvasData | null;
+              if (canvas?.version === 1) await restoreCanvas(canvas);
+            } else {
+              localStorage.removeItem("workflowSpaceId");
+              sid = null;
             }
-          } else {
-            // Space not found in DB — start fresh
-            localStorage.removeItem("workflowSpaceId");
-            sid = null;
           }
-        }
 
-        if (!sid) {
-          // First visit — create a persistent Space for this user
-          const res = await fetch("/api/spaces", {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ name: "Workflow" }),
-          });
-          if (res.ok) {
-            const space = await res.json();
-            localStorage.setItem("workflowSpaceId", space.id);
-            sid = space.id;
+          if (!sid) {
+            const res = await fetch("/api/spaces", {
+              method:  "POST",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify({ name: "Workflow" }),
+            });
+            if (res.ok) {
+              const space = await res.json();
+              localStorage.setItem("workflowSpaceId", space.id);
+              sid = space.id;
+            }
           }
-        }
 
-        spaceIdRef.current = sid;
-        setSpaceId(sid);
+          spaceIdRef.current = sid;
+          setSpaceId(sid);
+        }
       } catch (err) {
         console.error("[WorkflowEditor] restore failed", err);
       } finally {
@@ -298,7 +322,7 @@ function WorkflowEditorInner() {
     }
 
     restore();
-    // startPoll is stable (its deps are stable Zustand methods + setNodes from ReactFlow)
+    // propSpaceId / propWorkflowId are stable props; startPoll deps are stable Zustand methods
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -914,10 +938,16 @@ function WorkflowEditorInner() {
 
 // ── Provider wrapper ──────────────────────────────────────────────────────────
 
-export function WorkflowEditor() {
+export function WorkflowEditor({
+  spaceId,
+  workflowId,
+}: {
+  spaceId?:    string;
+  workflowId?: string;
+} = {}) {
   return (
     <ReactFlowProvider>
-      <WorkflowEditorInner />
+      <WorkflowEditorInner spaceId={spaceId} workflowId={workflowId} />
     </ReactFlowProvider>
   );
 }
