@@ -41,7 +41,7 @@ const patchSchema = z.object({
   thumbnailUrl: z.string().url().optional().nullable(),
 });
 
-// PATCH /api/spaces/[id] — update name / canvasData
+// PATCH /api/spaces/[id] — shallow-merge canvasData to preserve coexisting keys
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -65,10 +65,15 @@ export async function PATCH(
     const updated = await prisma.space.update({
       where: { id },
       data: {
-        name:         parsed.data.name,
-        thumbnailUrl: parsed.data.thumbnailUrl,
+        ...(parsed.data.name !== undefined && { name: parsed.data.name }),
+        ...(parsed.data.thumbnailUrl !== undefined && { thumbnailUrl: parsed.data.thumbnailUrl }),
+        // Shallow-merge so WorkflowEditor (which sends nodes/edges/settings) and the
+        // Space detail page (which sends only workflows) can coexist without clobbering each other.
         ...(parsed.data.canvasData !== undefined && {
-          canvasData: parsed.data.canvasData as Prisma.InputJsonValue,
+          canvasData: {
+            ...((space.canvasData ?? {}) as Record<string, unknown>),
+            ...parsed.data.canvasData,
+          } as Prisma.InputJsonValue,
         }),
       },
     });
@@ -76,6 +81,29 @@ export async function PATCH(
     return NextResponse.json({ id: updated.id, updatedAt: updated.updatedAt });
   } catch (err) {
     console.error("[PATCH /api/spaces/[id]]", err);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+// DELETE /api/spaces/[id]
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { userId: clerkId } = await auth();
+    if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const user   = await resolveUser(clerkId);
+    const { id } = await params;
+
+    const space = await prisma.space.findFirst({ where: { id, userId: user.id } });
+    if (!space) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    await prisma.space.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[DELETE /api/spaces/[id]]", err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

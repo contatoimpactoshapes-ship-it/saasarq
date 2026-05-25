@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { UserButton } from "@clerk/nextjs";
 import {
-  Home, Search, Package, Globe, FolderOpen, LayoutGrid,
+  Home, Search, FolderOpen, LayoutGrid,
   Wand2, Video, Mic, Bot, ChevronLeft, ChevronRight,
   Bell, Settings, GraduationCap, Plus, Layers, Box,
   Pin, PinOff,
@@ -17,11 +17,9 @@ import { PLAN_LABELS, PLAN_CREDITS } from "@/lib/plans";
 import { ToolsMenu } from "./ToolsMenu";
 
 const NAV_ITEMS = [
-  { href: "/app",             label: "Início",     icon: Home },
-  { href: "/app/search",      label: "Pesquisar",  icon: Search },
-  { href: "/stock",           label: "Stock",      icon: Package },
-  { href: "/app/community",   label: "Comunidade", icon: Globe },
-  { href: "/app/projects",    label: "Projetos",   icon: FolderOpen },
+  { href: "/app",          label: "Início",    icon: Home },
+  { href: "/app/search",   label: "Pesquisar", icon: Search },
+  { href: "/app/projects", label: "Projetos",  icon: FolderOpen },
 ];
 
 const TOOL_ITEMS = [
