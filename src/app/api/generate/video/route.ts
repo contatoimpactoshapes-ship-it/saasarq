@@ -6,6 +6,7 @@ import { getOrCreateUser, debitCredits, refundCredits, hasEnoughCredits } from "
 import { submitFalJobRaw, buildFalWebhookUrl } from "@/lib/fal";
 import { getFalModelId, getFalVideoImgModelId } from "@/lib/model-lookup";
 import { getVideoModel } from "@/lib/models";
+import { canUseFeature, getVideoCooldownSeconds, checkExpensiveModelAccess } from "@/lib/economy/abuse-protection";
 
 const videoSchema = z.object({
   prompt:      z.string().max(5000).default(""),
@@ -158,6 +159,29 @@ export async function POST(req: NextRequest) {
     const clerkUser = await currentUser();
     const email     = clerkUser?.emailAddresses[0]?.emailAddress ?? "";
     const user      = await getOrCreateUser(clerkId, email);
+
+    // ── Economy Engine checks ─────────────────────────────────────────────────
+    if (!canUseFeature(user.plan, "videoGenerate")) {
+      return NextResponse.json(
+        { error: "Geração de vídeo não está disponível no seu plano. Faça upgrade para acessar este recurso." },
+        { status: 403 }
+      );
+    }
+
+    const cooldownSec = await getVideoCooldownSeconds(user.id, user.plan);
+    if (cooldownSec > 0) {
+      const mins = Math.ceil(cooldownSec / 60);
+      return NextResponse.json(
+        { error: `Aguarde ${mins} minuto${mins !== 1 ? "s" : ""} antes de gerar outro vídeo.`, cooldownSeconds: cooldownSec },
+        { status: 429 }
+      );
+    }
+
+    const overageError = await checkExpensiveModelAccess(user.id, user.plan, videoModel);
+    if (overageError) {
+      return NextResponse.json({ error: overageError }, { status: 429 });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     const enough = await hasEnoughCredits(user.id, CREDIT_COST);
     if (!enough) {
