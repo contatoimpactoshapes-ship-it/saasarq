@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser, debitCredits, refundCredits, hasEnoughCredits } from "@/lib/credits";
 import { submitFalJobRaw, buildFalWebhookUrl } from "@/lib/fal";
 import { getImageModel } from "@/lib/models";
+import { meetsMinPlan, checkConcurrencyLimit, ECONOMY_ERRORS } from "@/lib/economy";
+import type { PlanId } from "@/lib/plans";
 
 // Maps UI aspect ratio values to FAL image_size strings
 const ASPECT_TO_FAL: Record<string, string> = {
@@ -51,12 +53,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Modelo inválido" }, { status: 400 });
     }
 
-    // Plan check for premium models
-    const isPremiumModel = "premium" in imageModel && imageModel.premium;
-    if (isPremiumModel && !["PREMIUM", "PREMIUM_PLUS", "PRO"].includes(user.plan) && !user.isAdmin) {
+    // Plan check via minPlan field
+    if ("minPlan" in imageModel && imageModel.minPlan && !user.isAdmin) {
+      if (!meetsMinPlan(user.plan, imageModel.minPlan as PlanId)) {
+        return NextResponse.json(
+          {
+            error: `Este modelo requer plano ${imageModel.minPlan} ou superior`,
+            code: ECONOMY_ERRORS.PREMIUM_MODEL_LOCKED,
+            minPlan: imageModel.minPlan,
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Concurrency limit
+    const concurrency = await checkConcurrencyLimit(user.id, user.plan);
+    if (!concurrency.allowed) {
       return NextResponse.json(
-        { error: "Este modelo requer plano Premium ou superior" },
-        { status: 403 }
+        {
+          error: `Limite de gerações simultâneas atingido (${concurrency.active}/${concurrency.limit}). Aguarde uma geração terminar.`,
+          code:   ECONOMY_ERRORS.CONCURRENCY_LIMIT,
+          limit:  concurrency.limit,
+          active: concurrency.active,
+        },
+        { status: 429 }
       );
     }
 
@@ -64,7 +85,12 @@ export async function POST(req: NextRequest) {
     const enough = await hasEnoughCredits(user.id, totalCost);
     if (!enough) {
       return NextResponse.json(
-        { error: "Créditos insuficientes", required: totalCost, available: user.credits },
+        {
+          error:    "Créditos insuficientes",
+          code:     ECONOMY_ERRORS.INSUFFICIENT_CREDITS,
+          required: totalCost,
+          current:  user.credits,
+        },
         { status: 402 }
       );
     }

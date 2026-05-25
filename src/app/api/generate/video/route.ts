@@ -7,6 +7,7 @@ import { submitFalJobRaw, buildFalWebhookUrl } from "@/lib/fal";
 import { getFalModelId, getFalVideoImgModelId } from "@/lib/model-lookup";
 import { getVideoModel } from "@/lib/models";
 import { canUseFeature, getVideoCooldownSeconds, checkExpensiveModelAccess } from "@/lib/economy/abuse-protection";
+import { checkConcurrencyLimit, meetsMinPlan, ECONOMY_ERRORS } from "@/lib/economy";
 
 const videoSchema = z.object({
   prompt:      z.string().max(5000).default(""),
@@ -163,7 +164,23 @@ export async function POST(req: NextRequest) {
     // ── Economy Engine checks ─────────────────────────────────────────────────
     if (!canUseFeature(user.plan, "videoGenerate")) {
       return NextResponse.json(
-        { error: "Geração de vídeo não está disponível no seu plano. Faça upgrade para acessar este recurso." },
+        {
+          error:   "Geração de vídeo não está disponível no seu plano. Faça upgrade para acessar este recurso.",
+          code:    ECONOMY_ERRORS.PLAN_RESTRICTION,
+          minPlan: "ESSENTIAL",
+        },
+        { status: 403 }
+      );
+    }
+
+    // Per-model plan gate
+    if (modelDef.minPlan && !user.isAdmin && !meetsMinPlan(user.plan, modelDef.minPlan)) {
+      return NextResponse.json(
+        {
+          error:   `${modelDef.name} requer plano ${modelDef.minPlan} ou superior.`,
+          code:    ECONOMY_ERRORS.PREMIUM_MODEL_LOCKED,
+          minPlan: modelDef.minPlan,
+        },
         { status: 403 }
       );
     }
@@ -172,20 +189,49 @@ export async function POST(req: NextRequest) {
     if (cooldownSec > 0) {
       const mins = Math.ceil(cooldownSec / 60);
       return NextResponse.json(
-        { error: `Aguarde ${mins} minuto${mins !== 1 ? "s" : ""} antes de gerar outro vídeo.`, cooldownSeconds: cooldownSec },
+        {
+          error:           `Aguarde ${mins} minuto${mins !== 1 ? "s" : ""} antes de gerar outro vídeo.`,
+          code:            ECONOMY_ERRORS.COOLDOWN_ACTIVE,
+          cooldownSeconds: cooldownSec,
+        },
         { status: 429 }
       );
     }
 
     const overageError = await checkExpensiveModelAccess(user.id, user.plan, videoModel);
     if (overageError) {
-      return NextResponse.json({ error: overageError }, { status: 429 });
+      return NextResponse.json(
+        { error: overageError, code: ECONOMY_ERRORS.OVERAGE_PROTECTION },
+        { status: 429 }
+      );
+    }
+
+    // Concurrency limit
+    const concurrency = await checkConcurrencyLimit(user.id, user.plan);
+    if (!concurrency.allowed) {
+      return NextResponse.json(
+        {
+          error:  `Limite de gerações simultâneas atingido (${concurrency.active}/${concurrency.limit}).`,
+          code:   ECONOMY_ERRORS.CONCURRENCY_LIMIT,
+          limit:  concurrency.limit,
+          active: concurrency.active,
+        },
+        { status: 429 }
+      );
     }
     // ─────────────────────────────────────────────────────────────────────────
 
     const enough = await hasEnoughCredits(user.id, CREDIT_COST);
     if (!enough) {
-      return NextResponse.json({ error: "Créditos insuficientes", required: CREDIT_COST }, { status: 402 });
+      return NextResponse.json(
+        {
+          error:    "Créditos insuficientes",
+          code:     ECONOMY_ERRORS.INSUFFICIENT_CREDITS,
+          required: CREDIT_COST,
+          current:  user.credits,
+        },
+        { status: 402 }
+      );
     }
 
     const generation = await prisma.generation.create({

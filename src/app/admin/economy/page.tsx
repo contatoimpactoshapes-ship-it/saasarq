@@ -56,6 +56,8 @@ const FEATURE_LABELS: Record<keyof PlanFeatureFlags, string> = {
   upscale:       "Upscale",
   creditPacks:   "Credit Packs",
   priorityQueue: "Fila Prioritária",
+  soraAccess:    "Sora 2",
+  premiumVideos: "Vídeos Premium",
 };
 
 function MarginBadge({ pct }: { pct: number }) {

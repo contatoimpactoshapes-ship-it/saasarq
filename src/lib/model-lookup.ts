@@ -28,7 +28,7 @@ const STATIC_MODEL_MAP: Record<string, string> = {
   // SDXL
   "render-sdxl":             "fal-ai/stable-diffusion-xl/image-to-image",
   // Inpainting
-  "inpaint-flux-fill":       "fal-ai/flux/dev/fill",
+  "inpaint-flux-fill":       "fal-ai/flux-pro/v1/fill",
 };
 
 export function getFalModelId(modelId: string): string | undefined {
