@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser, debitCredits, refundCredits, hasEnoughCredits } from "@/lib/credits";
-import { submitFalJobRaw } from "@/lib/fal";
+import { submitFalJobRaw, buildFalWebhookUrl } from "@/lib/fal";
 import { getFalModelId } from "@/lib/model-lookup";
 import { logAndSanitize, sanitizeError } from "@/lib/errors";
 
@@ -182,9 +182,7 @@ export async function POST(req: NextRequest) {
 
     const falInput = buildFalInput();
 
-    const webhookUrl = process.env.FAL_WEBHOOK_URL
-      ? `${process.env.FAL_WEBHOOK_URL}?generationId=${generation.id}`
-      : undefined;
+    const webhookUrl = buildFalWebhookUrl(generation.id);
 
     let falRequestId: string;
     try {

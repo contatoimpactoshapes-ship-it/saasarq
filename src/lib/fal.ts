@@ -4,6 +4,26 @@ fal.config({
   credentials: process.env.FAL_KEY!,
 });
 
+/**
+ * Builds the FAL webhook callback URL for a generation job.
+ *
+ * If FAL_WEBHOOK_SECRET is set, appends it as a `secret` query param so the
+ * webhook handler can reject forged requests via timingSafeEqual comparison.
+ * FAL.ai calls the URL verbatim — it does not strip or alter query params.
+ */
+export function buildFalWebhookUrl(generationId: string): string | undefined {
+  const base = process.env.FAL_WEBHOOK_URL;
+  if (!base) return undefined;
+
+  const url = new URL(base);
+  url.searchParams.set("generationId", generationId);
+
+  const secret = process.env.FAL_WEBHOOK_SECRET;
+  if (secret) url.searchParams.set("secret", secret);
+
+  return url.toString();
+}
+
 export interface FalImageInput {
   prompt: string;
   image_size?: string;

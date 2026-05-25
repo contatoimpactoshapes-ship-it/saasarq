@@ -3,13 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser, debitCredits, refundCredits, hasEnoughCredits } from "@/lib/credits";
-import { submitFalJobRaw } from "@/lib/fal";
+import { submitFalJobRaw, buildFalWebhookUrl } from "@/lib/fal";
 
 const CREDIT_COST = 120;
 
-// fal-ai/flux/dev/fill — best open inpainting model
+// fal-ai/flux-pro/v1/fill — best open inpainting model
 // mask_url: white = fill, black = keep
-const INPAINT_MODEL = "fal-ai/flux/dev/fill";
+const INPAINT_MODEL = "fal-ai/flux-pro/v1/fill";
 
 const inpaintSchema = z.object({
   imageUrl: z.string().url(),
@@ -73,9 +73,7 @@ export async function POST(req: NextRequest) {
       enable_safety_checker: false,
     };
 
-    const webhookUrl = process.env.FAL_WEBHOOK_URL
-      ? `${process.env.FAL_WEBHOOK_URL}?generationId=${generation.id}`
-      : undefined;
+    const webhookUrl = buildFalWebhookUrl(generation.id);
 
     let falRequestId: string;
     try {

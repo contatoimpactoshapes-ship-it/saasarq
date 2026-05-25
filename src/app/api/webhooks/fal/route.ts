@@ -1,7 +1,21 @@
+import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { refundCredits } from "@/lib/credits";
 import { saveImageFromUrl } from "@/lib/r2";
+
+function validateWebhookSecret(req: NextRequest): boolean {
+  const expected = process.env.FAL_WEBHOOK_SECRET;
+  // If no secret is configured, skip enforcement (backward compat for inflight jobs).
+  // Set FAL_WEBHOOK_SECRET in production to enforce validation.
+  if (!expected) {
+    console.warn("[FAL webhook] FAL_WEBHOOK_SECRET not set — running without auth");
+    return true;
+  }
+  const provided = req.nextUrl.searchParams.get("secret") ?? "";
+  if (provided.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(provided, "utf8"), Buffer.from(expected, "utf8"));
+}
 
 // Extract output URLs from any FAL webhook payload
 function extractOutputUrls(payload: Record<string, unknown>): string[] {
@@ -21,6 +35,11 @@ function extractOutputUrls(payload: Record<string, unknown>): string[] {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!validateWebhookSecret(req)) {
+      console.warn("[FAL webhook] Rejected — invalid secret");
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const generationId = req.nextUrl.searchParams.get("generationId");
     if (!generationId) {
       return NextResponse.json({ error: "Missing generationId" }, { status: 400 });

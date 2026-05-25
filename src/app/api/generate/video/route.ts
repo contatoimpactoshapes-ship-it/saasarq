@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser, debitCredits, refundCredits, hasEnoughCredits } from "@/lib/credits";
-import { submitFalJobRaw } from "@/lib/fal";
+import { submitFalJobRaw, buildFalWebhookUrl } from "@/lib/fal";
 import { getFalModelId, getFalVideoImgModelId } from "@/lib/model-lookup";
 import { getVideoModel } from "@/lib/models";
 
@@ -194,9 +194,7 @@ export async function POST(req: NextRequest) {
         if (!falModelId) throw new Error(`Endpoint FAL não encontrado para: ${videoModel}`);
 
         const falInput   = buildFalVideoInput(videoModel, prompt, imageUrl, duration, aspectRatio);
-        const webhookUrl = process.env.FAL_WEBHOOK_URL
-          ? `${process.env.FAL_WEBHOOK_URL}?generationId=${generation.id}`
-          : undefined;
+        const webhookUrl = buildFalWebhookUrl(generation.id);
 
         requestId = await submitFalJobRaw(falModelId, falInput, webhookUrl);
       }
