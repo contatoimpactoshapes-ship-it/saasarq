@@ -5,15 +5,22 @@ import { toast } from "sonner";
 import {
   Upload, X, Play, Loader2, AlertCircle, Download,
   Video, Image as ImageIcon, Sparkles, Film, ChevronDown,
-  Check, MousePointerClick,
+  Check, MousePointerClick, Lock,
 } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { GeneratorPanel } from "@/components/tools/GeneratorPanel";
 import { GenerateButton } from "@/components/tools/GenerateButton";
+import { InsufficientCreditsModal } from "@/components/economy/InsufficientCreditsModal";
+import { LowBalanceWarning } from "@/components/economy/LowBalanceWarning";
+import { CooldownBanner } from "@/components/economy/CooldownBanner";
 import { useGenerationStore, type GenerationItem } from "@/stores/useGenerationStore";
 import { useCreditsStore } from "@/stores/useCreditsStore";
 import { VIDEO_MODELS, getVideoModel } from "@/lib/models";
+import { meetsMinPlan } from "@/lib/economy";
+import { PLAN_CREDITS } from "@/lib/plans";
+import type { PlanId } from "@/lib/plans";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 
 const POLL_INTERVAL = 4000;
 
@@ -73,13 +80,19 @@ function aspectClass(ratio: string) {
   return "aspect-video";
 }
 
+const MIN_PLAN_LABELS: Record<string, string> = {
+  ESSENTIAL: "Essential", PREMIUM: "Premium", PREMIUM_PLUS: "Premium+", PRO: "Pro",
+};
+
 // ── Model dropdown ─────────────────────────────────────────────────────────────
 function VideoModelDropdown({
-  value, onChange, disabled,
-}: { value: string; onChange: (id: string) => void; disabled?: boolean }) {
+  value, onChange, disabled, userPlan, onUpgrade,
+}: {
+  value: string; onChange: (id: string) => void; disabled?: boolean;
+  userPlan: string; onUpgrade: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const selected = VIDEO_MODELS.find((m) => m.id === value) ?? VIDEO_MODELS[0];
-
   const groups = Array.from(new Set(VIDEO_MODELS.map((m) => m.group)));
 
   return (
@@ -114,34 +127,62 @@ function VideoModelDropdown({
                   {group}
                 </div>
                 {VIDEO_MODELS.filter((m) => m.group === group).map((model) => {
-                  const active = model.id === value;
+                  const active   = model.id === value;
+                  const locked   = !!model.minPlan && !meetsMinPlan(userPlan, model.minPlan as PlanId);
                   return (
                     <button
                       key={model.id}
-                      onClick={() => { onChange(model.id); setOpen(false); }}
+                      onClick={() => {
+                        if (locked) { onUpgrade(); setOpen(false); return; }
+                        onChange(model.id); setOpen(false);
+                      }}
                       className={cn(
-                        "w-full flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-[var(--bg-hover)] transition-colors text-left",
-                        active && "bg-[var(--bg-secondary)]"
+                        "w-full flex items-center gap-3 px-3 py-2.5 text-sm transition-colors text-left",
+                        locked
+                          ? "bg-[var(--bg-secondary)]/40 hover:bg-[var(--bg-secondary)] cursor-pointer"
+                          : "hover:bg-[var(--bg-hover)]",
+                        active && !locked && "bg-[var(--bg-secondary)]"
                       )}
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-medium text-[var(--text-primary)]">{model.name}</span>
-                          {model.badge && (
+                          <span className={cn("font-medium", locked ? "text-[var(--text-muted)]" : "text-[var(--text-primary)]")}>
+                            {model.name}
+                          </span>
+                          {model.badge && !locked && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-brand)] text-white font-semibold">
                               {model.badge}
+                            </span>
+                          )}
+                          {locked && model.minPlan && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-600 font-semibold">
+                              {MIN_PLAN_LABELS[model.minPlan]}+
                             </span>
                           )}
                         </div>
                         <p className="text-xs text-[var(--text-muted)] truncate">{model.description}</p>
                       </div>
                       <span className="text-xs text-[var(--text-muted)] shrink-0">{model.credits} cr</span>
-                      {active && <Check className="w-3.5 h-3.5 text-[var(--color-brand)] shrink-0" />}
+                      {locked
+                        ? <Lock className="w-3 h-3 text-[var(--text-muted)]/60 shrink-0" />
+                        : active
+                        ? <Check className="w-3.5 h-3.5 text-[var(--color-brand)] shrink-0" />
+                        : null
+                      }
                     </button>
                   );
                 })}
               </div>
             ))}
+
+            <div className="px-3 py-2 border-t border-[var(--border-default)] bg-[var(--bg-secondary)]">
+              <button
+                onClick={() => { onUpgrade(); setOpen(false); }}
+                className="w-full text-center text-[10px] text-[var(--color-brand)] font-medium hover:underline"
+              >
+                Ver todos os planos e modelos disponíveis →
+              </button>
+            </div>
           </div>
         </>
       )}
@@ -240,12 +281,17 @@ export default function AIVideoGeneratorPage() {
     setIsGenerating, setCurrentId, setPollingRef,
   } = useGenerationStore();
 
-  const { credits, decrementCredits, refreshCredits } = useCreditsStore();
+  const { credits, plan, decrementCredits, refreshCredits } = useCreditsStore();
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const router = useRouter();
 
-  const modelDef    = getVideoModel(videoModel);
-  const creditsCost = modelDef?.credits ?? 500;
-  const hasEnough   = credits >= creditsCost;
+  const [creditsModal, setCreditsModal]   = useState({ open: false, required: 0, current: 0 });
+  const [cooldownSec, setCooldownSec]     = useState(0);
+
+  const modelDef       = getVideoModel(videoModel);
+  const creditsCost    = modelDef?.credits ?? 500;
+  const hasEnough      = credits >= creditsCost;
+  const planAllocation = PLAN_CREDITS[plan as keyof typeof PLAN_CREDITS] ?? 0;
 
   // Clamp duration to model max
   useEffect(() => {
@@ -344,7 +390,7 @@ export default function AIVideoGeneratorPage() {
       return;
     }
     if (!hasEnough) {
-      toast.error(`Créditos insuficientes. Necessário: ${creditsCost} cr`);
+      setCreditsModal({ open: true, required: creditsCost, current: credits });
       return;
     }
 
@@ -376,8 +422,26 @@ export default function AIVideoGeneratorPage() {
         }),
       });
 
-      const result = await res.json() as { generationId?: string; error?: string };
-      if (!res.ok) throw new Error(result.error ?? "Erro ao iniciar geração");
+      const result = await res.json() as {
+        generationId?: string; error?: string; code?: string;
+        required?: number; current?: number; cooldownSeconds?: number;
+      };
+
+      if (!res.ok) {
+        setIsGenerating(false);
+        updateGeneration(optimisticId, { status: "FAILED" });
+        refreshCredits();
+
+        if (result.code === "INSUFFICIENT_CREDITS") {
+          setCreditsModal({ open: true, required: result.required ?? creditsCost, current: result.current ?? credits });
+          return;
+        }
+        if (result.code === "COOLDOWN_ACTIVE" && result.cooldownSeconds) {
+          setCooldownSec(result.cooldownSeconds);
+          return;
+        }
+        throw new Error(result.error ?? "Erro ao iniciar geração");
+      }
 
       updateGeneration(optimisticId, { id: result.generationId!, status: "PROCESSING" });
       setCurrentId(result.generationId!);
@@ -409,6 +473,14 @@ export default function AIVideoGeneratorPage() {
         {/* ── Left panel ──────────────────────────────────────────────────────── */}
         <GeneratorPanel>
           <div className="p-4 space-y-5">
+
+            {/* Cooldown banner */}
+            {cooldownSec > 0 && (
+              <CooldownBanner
+                cooldownSeconds={cooldownSec}
+                onExpired={() => setCooldownSec(0)}
+              />
+            )}
 
             {/* Mode toggle */}
             <div className="flex rounded-lg border border-[var(--border-default)] overflow-hidden">
@@ -577,10 +649,21 @@ export default function AIVideoGeneratorPage() {
               <label className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">
                 Modelo de IA
               </label>
-              <VideoModelDropdown value={videoModel} onChange={setVideoModel} disabled={isGenerating} />
+              <VideoModelDropdown
+                value={videoModel}
+                onChange={setVideoModel}
+                disabled={isGenerating}
+                userPlan={plan}
+                onUpgrade={() => router.push("/pricing")}
+              />
             </section>
 
             {/* Generate */}
+            <LowBalanceWarning
+              credits={credits}
+              planAllocation={planAllocation}
+              onBuyPack={() => router.push("/app/credits")}
+            />
             <GenerateButton
               onClick={handleGenerate}
               isGenerating={isGenerating}
@@ -588,17 +671,18 @@ export default function AIVideoGeneratorPage() {
               hasEnoughCredits={hasEnough}
               disabled={mode === "text" ? !prompt.trim() : !refImageUrl}
             />
-
-            {!hasEnough && (
-              <p className="text-xs text-center text-[var(--text-muted)]">
-                <a href="/pricing" className="text-[var(--color-brand)] hover:underline font-medium">
-                  Fazer upgrade
-                </a>{" "}
-                para continuar gerando
-              </p>
-            )}
           </div>
         </GeneratorPanel>
+
+        {/* Insufficient credits modal */}
+        <InsufficientCreditsModal
+          open={creditsModal.open}
+          required={creditsModal.required}
+          current={creditsModal.current}
+          onClose={() => setCreditsModal((s) => ({ ...s, open: false }))}
+          onUpgrade={() => { setCreditsModal((s) => ({ ...s, open: false })); router.push("/pricing"); }}
+          onBuyPack={() => { setCreditsModal((s) => ({ ...s, open: false })); router.push("/app/credits"); }}
+        />
 
         {/* ── Right gallery ────────────────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-h-0 bg-[var(--bg-secondary)]">

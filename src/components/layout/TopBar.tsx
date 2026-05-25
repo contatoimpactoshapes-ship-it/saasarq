@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, Zap } from "lucide-react";
+import { ChevronRight, Zap, AlertTriangle } from "lucide-react";
 import { useCreditsStore } from "@/stores/useCreditsStore";
 import { PromoBanner } from "./PromoBanner";
-import { PLAN_LABELS } from "@/lib/plans";
+import { PLAN_LABELS, PLAN_CREDITS } from "@/lib/plans";
+import { LOW_BALANCE_THRESHOLD_PCT } from "@/lib/economy";
 
 interface Crumb {
   label: string;
@@ -18,6 +19,10 @@ interface TopBarProps {
 
 export function TopBar({ breadcrumb = [], showBanner = true }: TopBarProps) {
   const { credits, plan } = useCreditsStore();
+
+  const planAllocation = PLAN_CREDITS[plan as keyof typeof PLAN_CREDITS] ?? 0;
+  const isLowBalance   = plan !== "FREE" && planAllocation > 0
+    && (credits / planAllocation) < LOW_BALANCE_THRESHOLD_PCT;
 
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-[var(--border-subtle)] h-12 flex items-center px-4 gap-4">
@@ -46,17 +51,32 @@ export function TopBar({ breadcrumb = [], showBanner = true }: TopBarProps) {
 
       {/* Actions — direita */}
       <div className="flex items-center gap-2 shrink-0 ml-auto">
-        <div className="hidden sm:flex items-center gap-1 text-xs text-[var(--text-muted)] bg-[var(--bg-secondary)] rounded-full px-3 py-1">
-          <Zap className="w-3 h-3 text-[var(--color-brand)]" />
-          <span className="font-semibold text-[var(--text-primary)]">
-            {credits.toLocaleString("pt-BR")}
-          </span>
-          <span>cr</span>
-        </div>
+        <Link href="/app/credits">
+          <div className={`hidden sm:flex items-center gap-1 text-xs rounded-full px-3 py-1 transition-colors ${
+            isLowBalance
+              ? "bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100"
+              : "bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:bg-[var(--bg-secondary)]"
+          }`}>
+            {isLowBalance
+              ? <AlertTriangle className="w-3 h-3 text-amber-500" />
+              : <Zap className="w-3 h-3 text-[var(--color-brand)]" />
+            }
+            <span className={`font-semibold ${isLowBalance ? "text-amber-700" : "text-[var(--text-primary)]"}`}>
+              {credits.toLocaleString("pt-BR")}
+            </span>
+            <span>cr</span>
+          </div>
+        </Link>
         {plan === "FREE" || plan === "ESSENTIAL" ? (
           <Link href="/pricing">
             <button className="h-7 px-3 text-xs font-semibold rounded-full brand-gradient text-white hover:opacity-90 transition-opacity whitespace-nowrap">
               Fazer upgrade
+            </button>
+          </Link>
+        ) : isLowBalance ? (
+          <Link href="/app/credits">
+            <button className="h-7 px-3 text-xs font-semibold rounded-full bg-amber-500 hover:bg-amber-600 text-white transition-colors whitespace-nowrap">
+              Recarregar
             </button>
           </Link>
         ) : (

@@ -19,9 +19,13 @@ import { PromptInput } from "@/components/tools/PromptInput";
 import { AspectRatioPicker } from "@/components/tools/AspectRatioPicker";
 import { QuantityPicker } from "@/components/tools/QuantityPicker";
 import { GenerateButton } from "@/components/tools/GenerateButton";
+import { InsufficientCreditsModal } from "@/components/economy/InsufficientCreditsModal";
+import { LowBalanceWarning } from "@/components/economy/LowBalanceWarning";
 import { useGenerationStore } from "@/stores/useGenerationStore";
 import { useCreditsStore } from "@/stores/useCreditsStore";
 import { getImageModel } from "@/lib/models";
+import { PLAN_CREDITS } from "@/lib/plans";
+import { useRouter } from "next/navigation";
 
 const POLL_INTERVAL = 2000;
 const RENDER_CREDIT_COST = 120;
@@ -113,13 +117,17 @@ function AIImageGeneratorInner() {
     addGeneration, updateGeneration, removeGeneration,
     setIsGenerating, setCurrentId, setPollingRef,
   } = useGenerationStore();
-  const { credits, decrementCredits, refreshCredits } = useCreditsStore();
+  const { credits, plan, decrementCredits, refreshCredits } = useCreditsStore();
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const router = useRouter();
+
+  const [creditsModal, setCreditsModal] = useState({ open: false, required: 0, current: 0 });
 
   // ── Derived ──────────────────────────────────────────────────
   const selectedTextModel    = getImageModel(model);
   const creditsCost          = (selectedTextModel?.credits ?? 50) * quantity;
   const hasEnoughCreditsText = credits >= creditsCost;
+  const planAllocation       = PLAN_CREDITS[plan as keyof typeof PLAN_CREDITS] ?? 0;
   const readyRenders         = renders.filter((r) => r.falUrl && !r.uploading);
   const uploadingCount       = renders.filter((r) => r.uploading).length;
   const selectedNode         = renders.find((r) => r.id === selectedNodeId) ?? null;
@@ -241,7 +249,10 @@ function AIImageGeneratorInner() {
   // ── Text → Image ─────────────────────────────────────────────
   async function handleGenerateText() {
     if (!prompt.trim()) { toast.error("Descreva o que você quer gerar."); return; }
-    if (!hasEnoughCreditsText) { toast.error(`Créditos insuficientes: ${creditsCost} cr`); return; }
+    if (!hasEnoughCreditsText) {
+      setCreditsModal({ open: true, required: creditsCost, current: credits });
+      return;
+    }
     setIsGenerating(true);
     const optimisticId = `opt-${Date.now()}`;
     addGeneration({ id: optimisticId, tool: "IMAGE_GENERATE", model, prompt, status: "PENDING", outputUrls: [], creditsCost, createdAt: new Date().toISOString() });
@@ -252,11 +263,20 @@ function AIImageGeneratorInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, model, aspectRatio, numImages: quantity }),
       });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error ?? "Erro ao iniciar geração");
-      updateGeneration(optimisticId, { id: result.generationId, status: "PROCESSING" });
-      setCurrentId(result.generationId);
-      startPolling(result.generationId);
+      const result = await res.json() as { generationId?: string; error?: string; code?: string; required?: number; current?: number; };
+      if (!res.ok) {
+        if (result.code === "INSUFFICIENT_CREDITS") {
+          setIsGenerating(false);
+          updateGeneration(optimisticId, { status: "FAILED" });
+          refreshCredits();
+          setCreditsModal({ open: true, required: result.required ?? creditsCost, current: result.current ?? credits });
+          return;
+        }
+        throw new Error(result.error ?? "Erro ao iniciar geração");
+      }
+      updateGeneration(optimisticId, { id: result.generationId!, status: "PROCESSING" });
+      setCurrentId(result.generationId!);
+      startPolling(result.generationId!);
     } catch (err: unknown) {
       stopPolling(); setIsGenerating(false);
       updateGeneration(optimisticId, { status: "FAILED" });
@@ -380,14 +400,20 @@ function AIImageGeneratorInner() {
       return;
     }
     const cost = RENDER_CREDIT_COST * pending.length * numOutputs;
-    if (credits < cost) { toast.error(`Créditos insuficientes: ${cost} cr`); return; }
+    if (credits < cost) {
+      setCreditsModal({ open: true, required: cost, current: credits });
+      return;
+    }
     await executeRenderJobs(pending);
   }
 
   async function handleGenerateRow(render: UploadedRender) {
     if (!render.falUrl || render.uploading) return;
     const cost = RENDER_CREDIT_COST * numOutputs;
-    if (credits < cost) { toast.error(`Créditos insuficientes: ${cost} cr`); return; }
+    if (credits < cost) {
+      setCreditsModal({ open: true, required: cost, current: credits });
+      return;
+    }
     await executeRenderJobs([render]);
   }
 
@@ -568,6 +594,11 @@ function AIImageGeneratorInner() {
                 <label className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Quantidade</label>
                 <QuantityPicker value={quantity} onChange={setQuantity} max={4} disabled={isGenerating} />
               </section>
+              <LowBalanceWarning
+                credits={credits}
+                planAllocation={planAllocation}
+                onBuyPack={() => router.push("/app/credits")}
+              />
               <GenerateButton
                 onClick={handleGenerateText}
                 isGenerating={isGenerating}
@@ -592,6 +623,16 @@ function AIImageGeneratorInner() {
         accept="image/*"
         className="hidden"
         onChange={(e) => { handleFileSelect(e.target.files); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+      />
+
+      {/* Insufficient credits modal */}
+      <InsufficientCreditsModal
+        open={creditsModal.open}
+        required={creditsModal.required}
+        current={creditsModal.current}
+        onClose={() => setCreditsModal((s) => ({ ...s, open: false }))}
+        onUpgrade={() => { setCreditsModal((s) => ({ ...s, open: false })); router.push("/pricing"); }}
+        onBuyPack={() => { setCreditsModal((s) => ({ ...s, open: false })); router.push("/app/credits"); }}
       />
 
       {/* Image Editor (inpainting) */}

@@ -5,9 +5,12 @@ import {
   Layers, Wand2, Video, AudioLines, Box, Package,
   FolderOpen, Clock, ArrowRight,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { CategoryCard } from "@/components/home/CategoryCard";
+import { LowBalanceWarning } from "@/components/economy/LowBalanceWarning";
 import { useCreditsStore } from "@/stores/useCreditsStore";
+import { PLAN_CREDITS } from "@/lib/plans";
 
 const CATEGORIES = [
   {
@@ -77,12 +80,23 @@ const item = {
 
 export default function DashboardPage() {
   const { credits, plan } = useCreditsStore();
+  const router = useRouter();
+  const planAllocation = PLAN_CREDITS[plan as keyof typeof PLAN_CREDITS] ?? 0;
 
   return (
     <div className="flex flex-col min-h-screen">
       <TopBar breadcrumb={[{ label: "Início" }]} />
 
       <div className="flex-1 p-6 space-y-8 max-w-5xl">
+        {/* Low balance warning */}
+        {plan !== "FREE" && (
+          <LowBalanceWarning
+            credits={credits}
+            planAllocation={planAllocation}
+            onBuyPack={() => router.push("/app/credits")}
+          />
+        )}
+
         {/* Greeting */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
