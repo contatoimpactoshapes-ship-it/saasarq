@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Zap, Check, Star, ArrowRight, TrendingUp, Shield, Clock } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { useCreditsStore } from "@/stores/useCreditsStore";
@@ -22,7 +23,20 @@ function CreditsPageInner() {
   // Handle post-purchase redirect
   useEffect(() => {
     if (searchParams.get("success") === "true") {
+      const packId = searchParams.get("pack") ?? "";
+      const packName = CREDIT_PACKS.find((p) => p.id === packId)?.name;
+      const totalCredits = (() => {
+        const p = CREDIT_PACKS.find((c) => c.id === packId);
+        return p ? (p.credits + p.bonus).toLocaleString("pt-BR") : "";
+      })();
+
       refreshCredits();
+      toast.success(
+        packName
+          ? `Pack ${packName} ativado! +${totalCredits} créditos adicionados.`
+          : "Compra concluída! Seus créditos foram adicionados.",
+        { duration: 6000 }
+      );
     }
   }, [searchParams, refreshCredits]);
 

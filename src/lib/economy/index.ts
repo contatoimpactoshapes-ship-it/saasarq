@@ -21,8 +21,8 @@ export {
 export type { GenerationEconomics, ModelMarginSummary, UserMarginSummary } from "./cost-engine";
 export { computeGenerationEconomics, buildModelMargins, buildUserMargins } from "./cost-engine";
 
-export type { DailyCostRow } from "./margin-engine";
-export { fetchModelMargins, fetchDeficitUsers, fetchDailyCosts } from "./margin-engine";
+export type { DailyCostRow, PackMetrics } from "./margin-engine";
+export { fetchModelMargins, fetchDeficitUsers, fetchDailyCosts, fetchPackMetrics } from "./margin-engine";
 
 export {
   canUseFeature,

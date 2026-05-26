@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, handleAdminError } from "@/lib/admin";
-import { fetchModelMargins, fetchDeficitUsers, fetchDailyCosts } from "@/lib/economy/margin-engine";
+import { fetchModelMargins, fetchDeficitUsers, fetchDailyCosts, fetchPackMetrics } from "@/lib/economy/margin-engine";
 import { CREDIT_VALUE_BRL, PLAN_FEATURES, CREDIT_PACKS } from "@/lib/economy/pricing";
 import { USD_BRL_RATE } from "@/lib/ai-costs";
 import { PLANS } from "@/lib/plans";
@@ -11,10 +11,11 @@ export async function GET() {
   try {
     await requireAdmin();
 
-    const [modelMargins, deficitUsers, dailyCosts] = await Promise.all([
+    const [modelMargins, deficitUsers, dailyCosts, packMetrics] = await Promise.all([
       fetchModelMargins(30),
       fetchDeficitUsers(25, 30),
       fetchDailyCosts(7),
+      fetchPackMetrics(),
     ]);
 
     // ── Platform totals (derived from model margins) ──────────────────────────
@@ -58,6 +59,7 @@ export async function GET() {
       modelMargins,
       deficitUsers,
       dailyCosts,
+      packMetrics,
       creditValueTable,
       planFeatures:  PLAN_FEATURES,
       creditPacks:   CREDIT_PACKS,

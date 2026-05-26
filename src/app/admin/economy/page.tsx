@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import {
   TrendingUp, TrendingDown, DollarSign, Activity, RefreshCw,
-  AlertTriangle, CheckCircle2, XCircle, Package, Zap, Shield,
+  AlertTriangle, CheckCircle2, XCircle, Package, Zap, Shield, ShoppingCart,
 } from "lucide-react";
 import type { PlanFeatureFlags, CreditPack } from "@/lib/economy/pricing";
 import type { ModelMarginSummary, UserMarginSummary } from "@/lib/economy/cost-engine";
-import type { DailyCostRow } from "@/lib/economy/margin-engine";
+import type { DailyCostRow, PackMetrics } from "@/lib/economy/margin-engine";
 
 // ── Response shape ────────────────────────────────────────────────────────────
 
@@ -25,15 +25,16 @@ interface Platform {
 }
 
 interface EconomyData {
-  platform:        Platform;
-  modelMargins:    ModelMarginSummary[];
-  deficitUsers:    UserMarginSummary[];
-  dailyCosts:      DailyCostRow[];
+  platform:         Platform;
+  modelMargins:     ModelMarginSummary[];
+  deficitUsers:     UserMarginSummary[];
+  dailyCosts:       DailyCostRow[];
+  packMetrics:      PackMetrics;
   creditValueTable: CreditValueRow[];
-  planFeatures:    Record<string, PlanFeatureFlags>;
-  creditPacks:     CreditPack[];
-  usdBrlRate:      number;
-  computedAt:      string;
+  planFeatures:     Record<string, PlanFeatureFlags>;
+  creditPacks:      CreditPack[];
+  usdBrlRate:       number;
+  computedAt:       string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -432,6 +433,150 @@ export default function EconomyPage() {
               );
             })
           }
+        </div>
+      </div>
+
+      {/* ── Pack Revenue ── */}
+      <div className="bg-[#0a0a0a] border border-indigo-500/20 rounded-xl overflow-hidden shadow-2xl">
+        <div className="px-6 py-4 border-b border-indigo-500/10 flex items-center gap-2 bg-indigo-500/5">
+          <ShoppingCart className="w-4 h-4 text-indigo-400" />
+          <h2 className="text-sm font-medium text-indigo-300">Pack Revenue — Recargas</h2>
+          <span className="ml-auto text-[10px] text-indigo-500 font-mono">histórico completo</span>
+        </div>
+
+        {/* KPI row */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 divide-x divide-white/5 border-b border-white/5">
+          {[
+            {
+              label: "Total Vendas",
+              value: loading ? "…" : (data?.packMetrics.totalPurchases ?? 0).toString(),
+              sub:   loading ? "" : `${data?.packMetrics.last30DayCount ?? 0} últimos 30d`,
+              color: "text-indigo-400",
+            },
+            {
+              label: "Receita Total",
+              value: loading ? "…" : fmtBRL(data?.packMetrics.totalRevenueBRL ?? 0),
+              sub:   loading ? "" : `${fmtBRL(data?.packMetrics.last30DayRevBRL ?? 0)} (30d)`,
+              color: "text-emerald-400",
+            },
+            {
+              label: "Créditos Vendidos",
+              value: loading ? "…" : (data?.packMetrics.totalCreditsAdded ?? 0).toLocaleString("pt-BR"),
+              sub:   "histórico total",
+              color: "text-zinc-300",
+            },
+            {
+              label: "Receita Média",
+              value: loading ? "…" : (
+                (data?.packMetrics.totalPurchases ?? 0) > 0
+                  ? fmtBRL((data!.packMetrics.totalRevenueBRL) / data!.packMetrics.totalPurchases)
+                  : "—"
+              ),
+              sub:   "por compra",
+              color: "text-amber-400",
+            },
+            {
+              label: "30d vs Total",
+              value: loading ? "…" : (
+                (data?.packMetrics.totalPurchases ?? 0) > 0
+                  ? `${Math.round(((data?.packMetrics.last30DayCount ?? 0) / data!.packMetrics.totalPurchases) * 100)}%`
+                  : "—"
+              ),
+              sub:   "das vendas",
+              color: "text-zinc-400",
+            },
+          ].map((kpi) => (
+            <div key={kpi.label} className="p-5">
+              <div className="text-[10px] uppercase tracking-widest text-zinc-600 font-semibold mb-2">{kpi.label}</div>
+              <div className={`text-xl font-bold font-mono ${loading ? "text-zinc-600 animate-pulse" : kpi.color}`}>
+                {kpi.value}
+              </div>
+              <div className="text-[10px] text-zinc-600 mt-1">{kpi.sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Per-pack breakdown */}
+        {!loading && data && Object.keys(data.packMetrics.byPack).length > 0 && (
+          <div className="px-6 py-4 border-b border-white/5">
+            <p className="text-[10px] uppercase tracking-widest text-zinc-600 font-semibold mb-3">Por Pack</p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {Object.values(data.packMetrics.byPack).map((entry) => {
+                const pack = data.creditPacks.find((p) => p.id === entry.packId);
+                return (
+                  <div key={entry.packId} className="bg-white/[0.02] rounded-lg p-3 border border-white/5">
+                    <p className="text-xs font-semibold text-zinc-300 mb-1">{pack?.name ?? entry.packId}</p>
+                    <div className="flex items-baseline gap-1 mb-0.5">
+                      <span className="text-lg font-bold font-mono text-emerald-400">{fmtBRL(entry.revenueBRL)}</span>
+                    </div>
+                    <p className="text-[10px] text-zinc-600">{entry.count} vendas · {entry.totalCredits.toLocaleString("pt-BR")} cr</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Recent purchases */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left">
+            <thead className="border-b border-white/5 text-[10px] uppercase text-zinc-600 font-semibold tracking-wider bg-[#050505]">
+              <tr>
+                <th className="px-4 py-3">Usuário</th>
+                <th className="px-4 py-3">Pack</th>
+                <th className="px-4 py-3 text-right">Créditos</th>
+                <th className="px-4 py-3 text-right">Bônus</th>
+                <th className="px-4 py-3 text-right">Valor</th>
+                <th className="px-4 py-3 text-right">Data</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {loading
+                ? Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    {Array.from({ length: 6 }).map((__, j) => (
+                      <td key={j} className="px-4 py-3"><div className="h-3 bg-white/5 rounded w-20" /></td>
+                    ))}
+                  </tr>
+                ))
+                : !data || data.packMetrics.recentPurchases.length === 0
+                ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-zinc-600 text-sm">
+                      Nenhuma compra de pack ainda
+                    </td>
+                  </tr>
+                )
+                : data.packMetrics.recentPurchases.map((p) => {
+                  const pack = data.creditPacks.find((c) => c.id === p.packId);
+                  return (
+                    <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="px-4 py-3 text-zinc-300 font-mono text-[10px] max-w-[160px] truncate">
+                        {p.userEmail ?? p.userId}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                          {pack?.name ?? p.packId}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-zinc-300">
+                        {p.creditsAdded.toLocaleString("pt-BR")}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-emerald-500">
+                        {p.bonusCredits > 0 ? `+${p.bonusCredits.toLocaleString("pt-BR")}` : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-emerald-400 font-semibold">
+                        {fmtBRL(p.amountPaidBRL)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-zinc-600 font-mono text-[10px]">
+                        {new Date(p.createdAt).toLocaleDateString("pt-BR")}
+                      </td>
+                    </tr>
+                  );
+                })
+              }
+            </tbody>
+          </table>
         </div>
       </div>
 

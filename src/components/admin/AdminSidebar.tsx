@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { 
-  BarChart3, 
-  Users, 
-  Activity, 
-  Box, 
+import {
+  BarChart3,
+  Users,
+  Activity,
+  Box,
   Bot,
   Zap,
   DollarSign,
@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   Settings,
   TrendingUp,
+  ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { name: "Revenue", href: "/admin/revenue", icon: DollarSign },
   { name: "AI Costs", href: "/admin/ai-costs", icon: Activity },
   { name: "Economy Engine", href: "/admin/economy", icon: TrendingUp },
+  { name: "Pack Sales",     href: "/admin/pack-purchases", icon: ShoppingCart },
   { name: "System Health", href: "/admin/health", icon: HeartPulse },
   { name: "Agents", href: "/admin/agents", icon: Bot },
   { name: "Audit Log", href: "/admin/audit", icon: ShieldAlert },

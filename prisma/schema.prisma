@@ -69,6 +69,7 @@ model User {
   generations          Generation[]
   pinnedTools          PinnedTool[]
   creditTransactions   CreditTransaction[]
+  packPurchases        PackPurchase[]
 }
 
 model Project {
@@ -147,4 +148,21 @@ model CreditTransaction {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([createdAt])
+}
+
+model PackPurchase {
+  id              String   @id @default(cuid())
+  userId          String
+  packId          String
+  stripeSessionId String   @unique
+  creditsAdded    Int
+  bonusCredits    Int      @default(0)
+  amountPaidBRL   Float
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }
