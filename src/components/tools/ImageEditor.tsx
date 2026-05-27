@@ -215,10 +215,21 @@ export function ImageEditor({ imageUrl, onClose, onSave }: Props) {
       const versionLabel = `v${history.length}`;
 
       // 4. Poll status
+      let errCount = 0;
       pollingRef.current = setInterval(async () => {
         try {
           const sr   = await fetch(`/api/generate/${generationId}/status`);
-          if (!sr.ok) return;
+          if (!sr.ok) {
+            errCount++;
+            if (errCount > 3) {
+              clearInterval(pollingRef.current!);
+              pollingRef.current = null;
+              setIsGenerating(false);
+              toast.error("Erro crítico na comunicação com o servidor de IA.");
+            }
+            return;
+          }
+          errCount = 0; // reseta contador em caso de sucesso na request
           const sd   = await sr.json();
           if (sd.status === "COMPLETED" && sd.outputUrls?.[0]) {
             clearInterval(pollingRef.current!);
