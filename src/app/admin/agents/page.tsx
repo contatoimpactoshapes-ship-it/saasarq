@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Bot, BrainCircuit, Activity, ShieldAlert, ArrowUpCircle, AlertTriangle, TrendingUp, RefreshCw, CheckCircle2, XCircle, Zap } from "lucide-react";
+import { useAdminEvents }  from "@/hooks/useAdminEvents";
+import { LiveBadge }       from "@/components/admin/LiveBadge";
+import { IncidentFeed, type IncidentCard } from "@/components/admin/IncidentFeed";
+import type { IncidentStatus, Severity } from "@/lib/realtime/typed-events";
 
 interface Alert {
   id:       string;
@@ -72,9 +76,51 @@ const SEVERITY_COLORS: Record<string, string> = {
 };
 
 export default function AgentsPage() {
-  const [data,    setData]    = useState<AgentsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
+  const [data,      setData]      = useState<AgentsData | null>(null);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState<string | null>(null);
+  const [live,      setLive]      = useState(false);
+  const [incidents, setIncidents] = useState<IncidentCard[]>([]);
+
+  // Load static incident snapshot on mount
+  useEffect(() => {
+    fetch("/api/admin/incidents?all=true")
+      .then((r) => r.ok ? r.json() : { incidents: [] })
+      .then((d) => setIncidents(d.incidents ?? []))
+      .catch(() => {});
+  }, []);
+
+  // Live incident updates via SSE
+  useAdminEvents({
+    onConnect:    () => setLive(true),
+    onDisconnect: () => setLive(false),
+    onEvent: (event) => {
+      if (event.type === "incident:opened") {
+        const card: IncidentCard = {
+          id:           event.incidentId,
+          incidentType: event.incidentType,
+          severity:     event.severity as Severity,
+          title:        event.title,
+          detail:       event.detail,
+          status:       event.status as IncidentStatus,
+          openedAt:     event.openedAt,
+        };
+        setIncidents((prev) => {
+          const without = prev.filter((i) => i.id !== card.id);
+          return [card, ...without];
+        });
+      }
+      if (event.type === "incident:updated" || event.type === "incident:resolved") {
+        setIncidents((prev) =>
+          prev.map((i) =>
+            i.id === event.incidentId
+              ? { ...i, status: event.status as IncidentStatus, detail: event.detail }
+              : i,
+          ),
+        );
+      }
+    },
+  });
 
   async function load() {
     setLoading(true);
@@ -99,14 +145,17 @@ export default function AgentsPage() {
           <h1 className="text-2xl font-bold text-white tracking-tight">Intelligence &amp; Agents Hub</h1>
           <p className="text-zinc-500 text-sm mt-1">Diagnóstico automático, detecção de anomalias e recomendações.</p>
         </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="flex items-center gap-2 text-xs text-zinc-400 hover:text-white bg-white/5 border border-white/10 rounded-md px-3 py-1.5 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          Rodar agentes
-        </button>
+        <div className="flex items-center gap-3">
+          <LiveBadge live={live} />
+          <button
+            onClick={load}
+            disabled={loading}
+            className="flex items-center gap-2 text-xs text-zinc-400 hover:text-white bg-white/5 border border-white/10 rounded-md px-3 py-1.5 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            Rodar agentes
+          </button>
+        </div>
       </div>
 
       {/* Overall Status */}
@@ -273,6 +322,9 @@ export default function AgentsPage() {
           )}
         </div>
       </div>
+
+      {/* Live Incident Feed */}
+      <IncidentFeed incidents={incidents} live={live} />
 
       {data && (
         <div className="text-[10px] text-zinc-600 font-mono text-right">

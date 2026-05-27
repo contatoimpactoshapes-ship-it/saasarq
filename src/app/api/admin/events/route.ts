@@ -1,6 +1,7 @@
-import { requireAdmin }   from "@/lib/admin";
-import { subscribe }      from "@/lib/realtime/broadcaster";
-import { startHeartbeat } from "@/lib/realtime/heartbeat";
+import { requireAdmin }       from "@/lib/admin";
+import { subscribe }          from "@/lib/realtime/broadcaster";
+import { startHeartbeat }     from "@/lib/realtime/heartbeat";
+import { startAnomalyEngine } from "@/lib/autonomous/anomaly-engine";
 
 export const runtime = "nodejs";       // Required: EventEmitter + ReadableStream
 export const dynamic = "force-dynamic"; // Never cache SSE responses
@@ -15,7 +16,8 @@ export async function GET() {
     return new Response("Forbidden", { status: 403 });
   }
 
-  startHeartbeat(); // idempotent — starts exactly once per process
+  startHeartbeat();     // idempotent — starts exactly once per process
+  startAnomalyEngine(); // idempotent — subscribes to event bus once
 
   const id = crypto.randomUUID();
   let cleanup: (() => void) | undefined;

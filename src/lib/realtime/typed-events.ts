@@ -1,6 +1,9 @@
 // Discriminated union of all admin SSE events.
 // Every event carries a stable `id` (UUID) and `ts` (epoch ms).
 
+export type Severity     = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+export type IncidentStatus = "OPEN" | "INVESTIGATING" | "RESOLVED";
+
 export type AdminEventType =
   | "generation:started"
   | "generation:completed"
@@ -8,6 +11,10 @@ export type AdminEventType =
   | "generation:stuck"
   | "pack:purchased"
   | "webhook:fal:failed"
+  | "anomaly:detected"
+  | "incident:opened"
+  | "incident:updated"
+  | "incident:resolved"
   | "heartbeat"
   | "connected";
 
@@ -59,9 +66,36 @@ export interface ConnectedEvent {
   ts:   number;
 }
 
+export interface AnomalyDetectedEvent {
+  type:           "anomaly:detected";
+  id:             string;
+  ts:             number;
+  anomalyType:    string;
+  severity:       Severity;
+  title:          string;
+  detail:         string;
+  score:          number;
+  affectedUserId?: string;
+}
+
+export interface IncidentEvent {
+  type:       "incident:opened" | "incident:updated" | "incident:resolved";
+  id:         string;
+  ts:         number;
+  incidentId: string;
+  incidentType: string;
+  severity:   Severity;
+  title:      string;
+  detail:     string;
+  status:     IncidentStatus;
+  openedAt:   number;
+}
+
 export type AdminEvent =
   | GenerationEvent
   | PackPurchasedEvent
   | WebhookFailedEvent
+  | AnomalyDetectedEvent
+  | IncidentEvent
   | HeartbeatEvent
   | ConnectedEvent;

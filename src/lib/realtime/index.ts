@@ -7,7 +7,11 @@ export type {
   GenerationEvent,
   PackPurchasedEvent,
   WebhookFailedEvent,
+  AnomalyDetectedEvent,
+  IncidentEvent,
   HeartbeatEvent,
   HeartbeatStats,
   ConnectedEvent,
+  Severity,
+  IncidentStatus,
 } from "./typed-events";

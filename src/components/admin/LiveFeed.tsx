@@ -27,6 +27,12 @@ export function toFeedEntry(e: AdminEvent): FeedEntry | null {
       return { key: e.id, type: e.type, label: "Pack adquirido", sub: `${e.packId} · +${e.totalCredits.toLocaleString("pt-BR")} cr`, ts: e.ts };
     case "webhook:fal:failed":
       return { key: e.id, type: e.type, label: "Webhook FAL falhou", sub: e.detail, ts: e.ts };
+    case "anomaly:detected":
+      return { key: e.id, type: e.type, label: `Anomalia: ${e.title}`, sub: e.detail, ts: e.ts };
+    case "incident:opened":
+      return { key: e.id, type: e.type, label: `Incidente aberto: ${e.title}`, sub: e.detail, ts: e.ts };
+    case "incident:resolved":
+      return { key: e.id, type: e.type, label: `Incidente resolvido: ${e.title}`, sub: e.detail, ts: e.ts };
     default:
       return null;
   }
@@ -47,6 +53,10 @@ const DOT: Record<string, string> = {
   "generation:stuck":     "bg-amber-500",
   "pack:purchased":       "bg-violet-500",
   "webhook:fal:failed":   "bg-rose-500",
+  "anomaly:detected":     "bg-rose-500",
+  "incident:opened":      "bg-rose-600",
+  "incident:updated":     "bg-amber-500",
+  "incident:resolved":    "bg-emerald-500",
 };
 
 const LABEL: Record<string, string> = {
@@ -56,6 +66,10 @@ const LABEL: Record<string, string> = {
   "generation:stuck":     "text-amber-400",
   "pack:purchased":       "text-violet-400",
   "webhook:fal:failed":   "text-rose-400",
+  "anomaly:detected":     "text-rose-400",
+  "incident:opened":      "text-rose-400",
+  "incident:updated":     "text-amber-400",
+  "incident:resolved":    "text-emerald-400",
 };
 
 function elapsed(ts: number): string {
