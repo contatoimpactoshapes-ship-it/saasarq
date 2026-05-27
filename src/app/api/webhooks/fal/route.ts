@@ -2,6 +2,7 @@ import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { refundCredits } from "@/lib/credits";
+import { emitAdminEvent } from "@/lib/realtime";
 import { saveImageFromUrl } from "@/lib/r2";
 
 function validateWebhookSecret(req: NextRequest): boolean {
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
         where: { id: generationId },
         data: { status: "COMPLETED", outputUrls },
       });
+      emitAdminEvent({ type: "generation:completed", id: crypto.randomUUID(), ts: Date.now(), generationId, userId: generation.user.id, tool: generation.tool, creditsCost: generation.creditsCost });
     } else if (isError) {
       await refundCredits(
         generation.user.id,
@@ -90,6 +92,7 @@ export async function POST(req: NextRequest) {
           errorMessage: body.error ?? "Falha no processamento",
         },
       });
+      emitAdminEvent({ type: "generation:failed", id: crypto.randomUUID(), ts: Date.now(), generationId, userId: generation.user.id, tool: generation.tool, error: body.error ?? "Falha no processamento" });
     }
 
     return NextResponse.json({ ok: true });

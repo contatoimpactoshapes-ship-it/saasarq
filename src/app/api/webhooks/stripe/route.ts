@@ -3,6 +3,7 @@ import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import { PLAN_CREDITS } from "@/lib/plans";
 import { CREDIT_PACKS } from "@/lib/economy/pricing";
+import { emitAdminEvent } from "@/lib/realtime";
 import type Stripe from "stripe";
 import type { Plan } from "@prisma/client";
 
@@ -172,6 +173,7 @@ async function fulfillCreditPack(session: Stripe.Checkout.Session): Promise<void
     ]);
 
     console.log(`[fulfillCreditPack] OK — user=${userId} pack=${packId} credits=+${totalCredits} session=${session.id}`);
+    emitAdminEvent({ type: "pack:purchased", id: crypto.randomUUID(), ts: Date.now(), userId, packId, totalCredits });
   } catch (err: unknown) {
     // P2002 = unique constraint violation → already fulfilled (idempotent retry)
     if (isPrismaUniqueConstraintError(err)) {

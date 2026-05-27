@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Filter, RotateCcw, Clock, Zap, AlertCircle, RefreshCw, ChevronDown } from "lucide-react";
+import { useAdminEvents } from "@/hooks/useAdminEvents";
+import { LiveBadge } from "@/components/admin/LiveBadge";
 
 interface Generation {
   id:                string;
@@ -46,6 +48,18 @@ export default function GenerationsPage() {
   const [status,      setStatus]     = useState("");
   const [failedOnly,  setFailedOnly] = useState(false);
   const [stuckOnly,   setStuckOnly]  = useState(false);
+  const [live,        setLive]       = useState(false);
+  const [newActivity, setNewActivity] = useState(0);
+
+  useAdminEvents({
+    onConnect:    () => setLive(true),
+    onDisconnect: () => setLive(false),
+    onEvent: (event) => {
+      if (event.type === "generation:started" || event.type === "generation:completed" || event.type === "generation:failed") {
+        setNewActivity((n) => n + 1);
+      }
+    },
+  });
 
   const buildParams = useCallback((cursor?: string) => {
     const p = new URLSearchParams({ limit: "30" });
@@ -106,6 +120,16 @@ export default function GenerationsPage() {
           <p className="text-zinc-500 text-sm mt-1">Feed de inferências com latência, custo e status.</p>
         </div>
         <div className="flex items-center gap-3">
+          <LiveBadge live={live} />
+          {newActivity > 0 && (
+            <button
+              onClick={() => { setNewActivity(0); load(); }}
+              className="flex items-center gap-1.5 text-xs bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20 rounded-md px-3 py-1.5 transition-colors animate-in fade-in duration-300"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+              {newActivity} nova{newActivity !== 1 ? "s" : ""} — Atualizar
+            </button>
+          )}
           <button
             onClick={load}
             disabled={loading}

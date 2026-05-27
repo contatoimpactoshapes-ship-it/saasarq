@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { DollarSign, Users, Zap, Activity, TrendingUp, RefreshCw } from "lucide-react";
+import { useAdminEvents } from "@/hooks/useAdminEvents";
+import { LiveBadge } from "@/components/admin/LiveBadge";
+import { LiveFeed, toFeedEntry, prependEntry, type FeedEntry } from "@/components/admin/LiveFeed";
 
 interface StatsData {
   totalUsers:         number;
@@ -55,6 +58,20 @@ export default function OverviewPage() {
   const [data,    setData]    = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
+  const [live,    setLive]    = useState(false);
+  const [feed,    setFeed]    = useState<FeedEntry[]>([]);
+
+  useAdminEvents({
+    onConnect:    () => setLive(true),
+    onDisconnect: () => setLive(false),
+    onEvent: (event) => {
+      if (event.type === "generation:completed") {
+        setData((prev) => prev ? { ...prev, generations24h: prev.generations24h + 1 } : prev);
+      }
+      const entry = toFeedEntry(event);
+      if (entry) setFeed((prev) => prependEntry(prev, entry));
+    },
+  });
 
   async function load() {
     setLoading(true);
@@ -100,15 +117,20 @@ export default function OverviewPage() {
           <h1 className="text-2xl font-bold text-white tracking-tight">Overview Executivo</h1>
           <p className="text-zinc-400 text-sm mt-1">Métricas chave e saúde financeira da plataforma.</p>
         </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="flex items-center gap-2 text-xs text-zinc-400 hover:text-white bg-white/5 border border-white/10 rounded-md px-3 py-1.5 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          Atualizar
-        </button>
+        <div className="flex items-center gap-3">
+          <LiveBadge live={live} eventCount={feed.length} />
+          <button
+            onClick={load}
+            disabled={loading}
+            className="flex items-center gap-2 text-xs text-zinc-400 hover:text-white bg-white/5 border border-white/10 rounded-md px-3 py-1.5 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            Atualizar
+          </button>
+        </div>
       </div>
+
+      <LiveFeed entries={feed} live={live} />
 
       {error && (
         <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-4 text-rose-400 text-sm">

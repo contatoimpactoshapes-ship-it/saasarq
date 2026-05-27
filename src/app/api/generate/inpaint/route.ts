@@ -1,5 +1,6 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
+import { emitAdminEvent } from "@/lib/realtime";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser, debitCredits, refundCredits, hasEnoughCredits } from "@/lib/credits";
@@ -92,6 +93,8 @@ export async function POST(req: NextRequest) {
       where: { id: generation.id },
       data:  { status: "PROCESSING", falRequestId },
     });
+
+    emitAdminEvent({ type: "generation:started", id: crypto.randomUUID(), ts: Date.now(), generationId: generation.id, userId: user.id, tool: "IMAGE_EDIT", model: "inpaint-flux-fill", creditsCost: CREDIT_COST });
 
     return NextResponse.json({
       generationId: generation.id,
