@@ -13,6 +13,9 @@ import {
   ShieldAlert,
   TrendingUp,
   ShoppingCart,
+  CreditCard,
+  Coins,
+  BarChart2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +24,9 @@ const NAV_ITEMS = [
   { name: "Users", href: "/admin/users", icon: Users },
   { name: "Generations", href: "/admin/generations", icon: Zap },
   { name: "Revenue", href: "/admin/revenue", icon: DollarSign },
+  { name: "Billing", href: "/admin/billing", icon: CreditCard },
+  { name: "Credits", href: "/admin/credits", icon: Coins },
+  { name: "Usage",   href: "/admin/usage",   icon: BarChart2 },
   { name: "AI Costs", href: "/admin/ai-costs", icon: Activity },
   { name: "Economy Engine", href: "/admin/economy", icon: TrendingUp },
   { name: "Pack Sales",     href: "/admin/pack-purchases", icon: ShoppingCart },
