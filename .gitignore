@@ -40,3 +40,9 @@ next-env.d.ts
 .claude/
 
 .vercel
+
+# local artifacts — never commit
+.claude_backup_root/
+.git_backup_root/
+claude
+deploy-guide.html

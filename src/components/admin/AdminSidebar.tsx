@@ -6,13 +6,11 @@ import {
   BarChart3,
   Users,
   Activity,
-  Box,
   Bot,
   Zap,
   DollarSign,
   HeartPulse,
   ShieldAlert,
-  Settings,
   TrendingUp,
   ShoppingCart,
 } from "lucide-react";
@@ -29,8 +27,6 @@ const NAV_ITEMS = [
   { name: "System Health", href: "/admin/health", icon: HeartPulse },
   { name: "Agents", href: "/admin/agents", icon: Bot },
   { name: "Audit Log", href: "/admin/audit", icon: ShieldAlert },
-  { name: "Spaces", href: "/admin/spaces", icon: Box },
-  { name: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
 export function AdminSidebar() {
