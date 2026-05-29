@@ -89,6 +89,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "prompt is required" }, { status: 400 });
     }
 
+    // ── spaceId ownership validation ───────────────────────────────────────
+    let resolvedSpaceId: string | null = null;
+    if (spaceId) {
+      const owned = await prisma.space.findFirst({ where: { id: spaceId, userId: user.id } });
+      resolvedSpaceId = owned ? spaceId : null;
+    }
+
     // ── Optional R2 upload ──────────────────────────────────────────────────
     let imageUrl: string | null = null;
 
@@ -102,13 +109,18 @@ export async function POST(req: NextRequest) {
       const ext    = imageFile.type.split("/")[1] ?? "jpg";
       const key    = `prompt-analyses/${user.id}/${Date.now()}.${ext}`;
       const buffer = Buffer.from(await imageFile.arrayBuffer());
-      imageUrl     = await uploadToR2(key, buffer, imageFile.type);
+      try {
+        imageUrl = await uploadToR2(key, buffer, imageFile.type);
+      } catch (uploadErr) {
+        console.error("[analyses] R2 upload failed — saving without image:", uploadErr);
+        // Fall through with imageUrl = null; analysis is still saved to DB
+      }
     }
 
     const analysis = await prisma.promptAnalysis.create({
       data: {
         userId:                user.id,
-        spaceId:               spaceId || null,
+        spaceId:               resolvedSpaceId,
         imageUrl,
         imageName:             imageName || null,
         prompt:                prompt.trim(),

@@ -8,6 +8,140 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model User {
+  id                 String              @id @default(cuid())
+  clerkId            String              @unique
+  email              String              @unique
+  name               String?
+  avatarUrl          String?
+  plan               Plan                @default(FREE)
+  credits            Int                 @default(0)
+  creditsReset       DateTime?
+  stripeCustomerId   String?             @unique
+  stripeSubId        String?             @unique
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  isAdmin            Boolean             @default(false)
+  creditTransactions CreditTransaction[]
+  generations        Generation[]
+  packPurchases      PackPurchase[]
+  pinnedTools        PinnedTool[]
+  projects           Project[]
+  promptAnalyses     PromptAnalysis[]
+  spaces             Space[]
+}
+
+model Project {
+  id          String       @id @default(cuid())
+  name        String
+  userId      String
+  isTeam      Boolean      @default(false)
+  color       String?      @default("#F97316")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  generations Generation[]
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Space {
+  id             String           @id @default(cuid())
+  name           String
+  userId         String
+  thumbnailUrl   String?
+  canvasData     Json?            @default("{}")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  promptAnalyses PromptAnalysis[]
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Generation {
+  id           String           @id @default(cuid())
+  userId       String
+  projectId    String?
+  tool         ToolType
+  model        String
+  prompt       String?
+  parameters   Json             @default("{}")
+  status       GenerationStatus @default(PENDING)
+  outputUrls   String[]
+  creditsCost  Int
+  falRequestId String?
+  errorMessage String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  project      Project?         @relation(fields: [projectId], references: [id])
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([falRequestId])
+  @@index([projectId])
+}
+
+model PinnedTool {
+  id     String   @id @default(cuid())
+  userId String
+  tool   ToolType
+  order  Int      @default(0)
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tool])
+  @@index([userId])
+}
+
+model CreditTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  amount      Int
+  type        String
+  description String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model PackPurchase {
+  id              String   @id @default(cuid())
+  userId          String
+  packId          String
+  stripeSessionId String   @unique
+  creditsAdded    Int
+  bonusCredits    Int      @default(0)
+  amountPaidBRL   Float
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model PromptAnalysis {
+  id                     String   @id @default(cuid())
+  userId                 String
+  spaceId                String?
+  imageUrl               String?
+  imageName              String?
+  prompt                 String
+  imageSummary           String?
+  qualityScore           Int      @default(0)
+  recommendedModel       String
+  recommendedAspectRatio String
+  suggestions            String[]
+  createdAt              DateTime @default(now())
+  space                  Space?   @relation(fields: [spaceId], references: [id])
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([spaceId])
+  @@index([createdAt])
+}
+
 enum Plan {
   FREE
   ESSENTIAL
@@ -47,146 +181,4 @@ enum GenerationStatus {
   PROCESSING
   COMPLETED
   FAILED
-}
-
-model User {
-  id               String    @id @default(cuid())
-  clerkId          String    @unique
-  email            String    @unique
-  name             String?
-  avatarUrl        String?
-  plan             Plan      @default(FREE)
-  credits          Int       @default(0)
-  creditsReset     DateTime?
-  stripeCustomerId String?   @unique
-  stripeSubId      String?   @unique
-  isAdmin          Boolean   @default(false)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  projects             Project[]
-  spaces               Space[]
-  generations          Generation[]
-  pinnedTools          PinnedTool[]
-  creditTransactions   CreditTransaction[]
-  packPurchases        PackPurchase[]
-  promptAnalyses       PromptAnalysis[]
-}
-
-model Project {
-  id        String   @id @default(cuid())
-  name      String
-  userId    String
-  isTeam    Boolean  @default(false)
-  color     String?  @default("#F97316")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  generations Generation[]
-
-  @@index([userId])
-}
-
-model Space {
-  id           String   @id @default(cuid())
-  name         String
-  userId       String
-  thumbnailUrl String?
-  canvasData   Json?    @default("{}")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  promptAnalyses PromptAnalysis[]
-
-  @@index([userId])
-}
-
-model Generation {
-  id          String           @id @default(cuid())
-  userId      String
-  projectId   String?
-  tool        ToolType
-  model       String
-  prompt      String?          @db.Text
-  parameters  Json             @default("{}")
-  status      GenerationStatus @default(PENDING)
-  outputUrls  String[]
-  creditsCost Int
-  falRequestId String?
-  errorMessage String?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-
-  @@index([userId])
-  @@index([falRequestId])
-  @@index([projectId])
-}
-
-model PinnedTool {
-  id     String   @id @default(cuid())
-  userId String
-  tool   ToolType
-  order  Int      @default(0)
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, tool])
-  @@index([userId])
-}
-
-model CreditTransaction {
-  id          String   @id @default(cuid())
-  userId      String
-  amount      Int
-  type        String
-  description String?
-  createdAt   DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([createdAt])
-}
-
-model PackPurchase {
-  id              String   @id @default(cuid())
-  userId          String
-  packId          String
-  stripeSessionId String   @unique
-  creditsAdded    Int
-  bonusCredits    Int      @default(0)
-  amountPaidBRL   Float
-  createdAt       DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([createdAt])
-}
-
-model PromptAnalysis {
-  id                     String   @id @default(cuid())
-  userId                 String
-  spaceId                String?
-  imageUrl               String?
-  imageName              String?
-  prompt                 String   @db.Text
-  imageSummary           String?  @db.Text
-  qualityScore           Int      @default(0)
-  recommendedModel       String
-  recommendedAspectRatio String
-  suggestions            String[]
-  createdAt              DateTime @default(now())
-
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  space Space? @relation(fields: [spaceId], references: [id], onDelete: SetNull)
-
-  @@index([userId])
-  @@index([spaceId])
-  @@index([createdAt])
 }

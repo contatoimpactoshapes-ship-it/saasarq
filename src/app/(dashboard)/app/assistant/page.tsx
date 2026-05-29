@@ -578,11 +578,15 @@ export default function AssistantPage() {
 
   async function deleteAnalysis(id: string, e: React.MouseEvent) {
     e.stopPropagation();
-    await fetch(`/api/assistant/analyses/${id}`, { method: "DELETE" }).catch(console.error);
-    setHistory((prev) => prev.filter((a) => a.id !== id));
-    if (activeAnalysisId === id) {
-      handleClear();
+    try {
+      const res = await fetch(`/api/assistant/analyses/${id}`, { method: "DELETE" });
+      if (!res.ok) { toast.error("Erro ao excluir análise."); return; }
+    } catch {
+      toast.error("Erro de rede ao excluir análise.");
+      return;
     }
+    setHistory((prev) => prev.filter((a) => a.id !== id));
+    if (activeAnalysisId === id) handleClear();
   }
 
   // ── Upload zone ───────────────────────────────────────────────────────────────
