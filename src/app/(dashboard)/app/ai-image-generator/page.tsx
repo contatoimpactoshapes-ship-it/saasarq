@@ -73,9 +73,9 @@ function AIImageGeneratorInner() {
   const [mode, setMode] = useState<"text" | "render3d">(initialMode);
 
   // ── Text mode state ──────────────────────────────────────────
-  const [model, setModel]           = useState("auto");
+  const [model, setModel]           = useState(searchParams.get("model") ?? "auto");
   const [prompt, setPrompt]         = useState(searchParams.get("prompt") ?? "");
-  const [aspectRatio, setAspectRatio] = useState("1:1");
+  const [aspectRatio, setAspectRatio] = useState(searchParams.get("aspectRatio") ?? "1:1");
   const [quantity, setQuantity]     = useState(1);
 
   // ── Render mode state ────────────────────────────────────────
