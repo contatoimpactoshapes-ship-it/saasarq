@@ -74,7 +74,7 @@ function AIImageGeneratorInner() {
 
   // ── Text mode state ──────────────────────────────────────────
   const [model, setModel]           = useState("auto");
-  const [prompt, setPrompt]         = useState("");
+  const [prompt, setPrompt]         = useState(searchParams.get("prompt") ?? "");
   const [aspectRatio, setAspectRatio] = useState("1:1");
   const [quantity, setQuantity]     = useState(1);
 
