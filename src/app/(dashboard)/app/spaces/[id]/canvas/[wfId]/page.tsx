@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { WorkflowEditor } from "@/components/workflow/WorkflowEditor";
+import { EnvironmentSidebar } from "@/components/workflow/EnvironmentSidebar";
 
 type Names = { spaceName: string; wfName: string };
 
 export default function WorkflowCanvasPage() {
   const params     = useParams();
+  const router     = useRouter();
   const spaceId    = params.id    as string;
   const workflowId = params.wfId  as string;
 
@@ -30,6 +32,11 @@ export default function WorkflowCanvasPage() {
     loadNames();
   }, [spaceId, workflowId]);
 
+  function handleSwitch(newWfId: string) {
+    if (newWfId === workflowId) return;
+    router.push(`/app/spaces/${spaceId}/canvas/${newWfId}`);
+  }
+
   return (
     <div className="flex flex-col h-screen">
       <TopBar
@@ -39,7 +46,15 @@ export default function WorkflowCanvasPage() {
           { label: names?.wfName    ?? "Canvas" },
         ]}
       />
-      <WorkflowEditor spaceId={spaceId} workflowId={workflowId} />
+      <div className="flex flex-1 min-h-0">
+        <EnvironmentSidebar
+          spaceId={spaceId}
+          activeId={workflowId}
+          spaceName={names?.spaceName ?? ""}
+          onSwitch={handleSwitch}
+        />
+        <WorkflowEditor key={workflowId} spaceId={spaceId} workflowId={workflowId} />
+      </div>
     </div>
   );
 }
