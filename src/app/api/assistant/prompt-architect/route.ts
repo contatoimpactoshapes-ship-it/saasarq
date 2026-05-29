@@ -8,22 +8,53 @@ import {
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_BYTES     = 5 * 1024 * 1024; // 5 MB
 const VISION_MODEL  = "claude-haiku-4-5-20251001";
+const MAX_TOKENS    = 1500;
 
 // ── JSON extraction helper ────────────────────────────────────────────────────
 
+function clamp(n: unknown): number {
+  const v = Number(n);
+  return Number.isFinite(v) ? Math.min(100, Math.max(0, Math.round(v))) : 0;
+}
+
 function parseStructured(raw: string): PromptArchitectResponse {
   const text = raw.trim();
+
+  let parsed: Record<string, unknown> | null = null;
+
   // Try direct parse
-  try { return JSON.parse(text); } catch { /* fall through */ }
-  // Try extracting first {...} block
-  const match = text.match(/\{[\s\S]*\}/);
-  if (match) {
-    try { return JSON.parse(match[0]); } catch { /* fall through */ }
+  try { parsed = JSON.parse(text); } catch { /* fall through */ }
+
+  // Try extracting first {...} block (handles markdown fences / extra text)
+  if (!parsed) {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) {
+      try { parsed = JSON.parse(match[0]); } catch { /* fall through */ }
+    }
   }
-  // Treat entire text as prompt
+
+  if (parsed && typeof parsed === "object") {
+    return {
+      prompt:                 typeof parsed.prompt === "string" ? parsed.prompt : text,
+      imageSummary:           typeof parsed.imageSummary === "string" ? parsed.imageSummary : null,
+      qualityScore:           clamp(parsed.qualityScore),
+      suggestions:            Array.isArray(parsed.suggestions)
+                                ? (parsed.suggestions as unknown[]).filter((s): s is string => typeof s === "string")
+                                : [],
+      recommendedModel:       typeof parsed.recommendedModel === "string"
+                                ? parsed.recommendedModel
+                                : "Nano Banana 2",
+      recommendedAspectRatio: typeof parsed.recommendedAspectRatio === "string"
+                                ? parsed.recommendedAspectRatio
+                                : "16:9",
+    };
+  }
+
+  // Last resort: treat full text as prompt
   return {
     prompt:                 text,
     imageSummary:           null,
+    qualityScore:           0,
     suggestions:            [],
     recommendedModel:       "Nano Banana 2",
     recommendedAspectRatio: "16:9",
@@ -34,18 +65,19 @@ function parseStructured(raw: string): PromptArchitectResponse {
 
 function buildFallback(message: string, hasImage: boolean): PromptArchitectResponse {
   const prompt = message.trim()
-    ? `${message.trim()}, photorealistic architectural visualization, 8K, ultra-detailed, professional render`
-    : "Modern minimalist interior, floor-to-ceiling windows, warm oak floors, soft diffused daylight, 8K photorealistic architectural visualization";
+    ? `${message.trim()}, architectural photography, natural light, physically accurate materials, photorealistic render, 8K ultra-detailed, no CGI artifacts, editorial quality`
+    : "Modern minimalist interior, floor-to-ceiling windows, warm oak flooring with natural grain, soft diffused daylight, full-frame camera 35mm lens, physically accurate materials, editorial architectural photography, 8K ultra-detailed";
 
   return {
     prompt,
     imageSummary: hasImage
-      ? "Imagem recebida. Configure ANTHROPIC_API_KEY para análise real com visão computacional."
+      ? "Imagem recebida. Configure ANTHROPIC_API_KEY para análise real com visão computacional e quality score."
       : null,
+    qualityScore: 0,
     suggestions: [
-      "Adicione iluminação específica: golden hour, soft diffused light, dramatic shadows",
-      "Especifique materiais: marble, oak, exposed concrete, glass, brass",
-      "Defina perspectiva: wide-angle, eye-level, 35mm architectural lens",
+      "Descreva os materiais com propriedades físicas: grãos naturais, textura, reflexo, desgaste",
+      "Especifique iluminação: origem, direção, temperatura de cor (ex: warm 3000K diffused daylight)",
+      "Defina câmera: altura, distância focal, perspectiva (ex: eye-level, 35mm, wide-angle)",
     ],
     recommendedModel:       "Nano Banana 2",
     recommendedAspectRatio: "16:9",
@@ -129,7 +161,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model:      VISION_MODEL,
-        max_tokens: 1024,
+        max_tokens: MAX_TOKENS,
         system:     PROMPT_ARCHITECT_SYSTEM_PROMPT,
         messages:   [{ role: "user", content: userContent }],
       }),
