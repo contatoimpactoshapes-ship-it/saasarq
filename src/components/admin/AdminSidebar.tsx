@@ -16,6 +16,7 @@ import {
   CreditCard,
   Coins,
   BarChart2,
+  Box,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { name: "Billing", href: "/admin/billing", icon: CreditCard },
   { name: "Credits", href: "/admin/credits", icon: Coins },
   { name: "Usage",   href: "/admin/usage",   icon: BarChart2 },
+  { name: "Spaces",  href: "/admin/spaces",  icon: Box },
   { name: "AI Costs", href: "/admin/ai-costs", icon: Activity },
   { name: "Economy Engine", href: "/admin/economy", icon: TrendingUp },
   { name: "Pack Sales",     href: "/admin/pack-purchases", icon: ShoppingCart },
