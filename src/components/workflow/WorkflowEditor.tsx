@@ -15,7 +15,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { toast } from "sonner";
-import { ImageIcon } from "lucide-react";
+import { ImageIcon, Hand, MousePointer, Download } from "lucide-react";
 import { sanitizeError } from "@/lib/errors";
 
 import { ImageNode, ImageNodeData, NodeStatus } from "./nodes/ImageNode";
@@ -105,6 +105,8 @@ function WorkflowEditorInner({
   const [spaceId,     setSpaceId]     = useState<string | null>(null);
   const [saveStatus,  setSaveStatus]  = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [isRestoring, setIsRestoring] = useState(true);
+
+  const [activeTool,   setActiveTool]   = useState<"select" | "hand">("select");
 
   const [contextMenu,  setContextMenu]  = useState<ContextMenuState | null>(null);
   const [lightboxUrl,  setLightboxUrl]  = useState<string | null>(null);
@@ -390,9 +392,10 @@ function WorkflowEditorInner({
           y: sourceNode.position.y,
         },
         data: buildRenderData(renderNodeId, {
-          status:  "pending",
-          prompt:  effectivePrompt,
-          label:   `Variação ${existingRenderCount + i + 1}`,
+          status:      "pending",
+          prompt:      effectivePrompt,
+          label:       `Variação ${existingRenderCount + i + 1}`,
+          aspectRatio: effectiveAspect,
         }),
       };
 
@@ -596,6 +599,8 @@ function WorkflowEditorInner({
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
 
+      if (e.key === "v" || e.key === "V") { e.preventDefault(); setActiveTool("select"); }
+      if (e.key === "h" || e.key === "H") { e.preventDefault(); setActiveTool("hand"); }
       if (e.key === "Escape") { setContextMenu(null); setLightboxUrl(null); }
       if (e.key === "Delete" || e.key === "Backspace") {
         setNodes((ns) => {
@@ -628,7 +633,7 @@ function WorkflowEditorInner({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [fitView, setNodes, setEdges]);
+  }, [fitView, setNodes, setEdges, setActiveTool]);
 
   // ── Context menu handlers ─────────────────────────────────────────────────
 
@@ -723,6 +728,66 @@ function WorkflowEditorInner({
     }));
   }, [setNodes]);
 
+  // ── Batch export ─────────────────────────────────────────────────────────
+
+  const handleBatchDownload = useCallback(async () => {
+    const candidates = nodes.filter((n) => {
+      if (!n.selected) return false;
+      const d = n.data as unknown as ImageNodeData;
+      return !!(d.imageUrl || d.falUrl);
+    });
+
+    if (!candidates.length) {
+      toast.info("Nenhuma imagem disponível na seleção.");
+      return;
+    }
+
+    if (candidates.length === 1) {
+      const d = candidates[0].data as unknown as ImageNodeData;
+      const url = d.imageUrl || d.falUrl!;
+      const label = (d.label ?? "render").replace(/[^a-z0-9_-]/gi, "_").slice(0, 40);
+      downloadUrl(url, `${label}.png`);
+      return;
+    }
+
+    toast.info(`Preparando ZIP com ${candidates.length} imagens...`);
+    try {
+      const { default: JSZip } = await import("jszip");
+      const zip = new JSZip();
+
+      await Promise.all(
+        candidates.map(async (node, i) => {
+          const d = node.data as unknown as ImageNodeData;
+          const url = d.imageUrl || d.falUrl;
+          if (!url) return;
+          try {
+            const res = await fetch(url);
+            if (!res.ok) return;
+            const blob = await res.blob();
+            const label = (d.label ?? `render_${i + 1}`).replace(/[^a-z0-9_-]/gi, "_").slice(0, 30);
+            const aspect = (d.aspectRatio ?? "1x1").replace(":", "x");
+            zip.file(`${String(i + 1).padStart(2, "0")}_${label}_${aspect}.png`, blob);
+          } catch { /* skip inaccessible URL */ }
+        })
+      );
+
+      const fileCount = Object.keys(zip.files).length;
+      if (fileCount === 0) {
+        toast.error("Imagens inacessíveis — use o botão de download em cada nó individualmente.");
+        return;
+      }
+
+      const content = await zip.generateAsync({ type: "blob" });
+      const zipUrl  = URL.createObjectURL(content);
+      downloadUrl(zipUrl, `renders_${fileCount}.zip`);
+      URL.revokeObjectURL(zipUrl);
+      toast.success(`${fileCount} imagens exportadas!`);
+    } catch (err) {
+      console.error("[BatchExport]", err);
+      toast.error("Erro ao gerar ZIP.");
+    }
+  }, [nodes]);
+
   // ── Counts & selected source ──────────────────────────────────────────────
 
   const sourceCount = nodes.filter((n) => {
@@ -734,6 +799,8 @@ function WorkflowEditorInner({
     const d = n.data as unknown as ImageNodeData;
     return d.nodeKind === "source" && d.falUrl && !d.uploading;
   }).length;
+
+  const selectedCount = nodes.filter((n) => n.selected).length;
 
   const selectedSourceNode = nodes.find((n) => {
     if (!n.selected) return false;
@@ -827,6 +894,8 @@ function WorkflowEditorInner({
           selectionMode={SelectionMode.Partial}
           multiSelectionKeyCode="Shift"
           deleteKeyCode={null}
+          panOnDrag={activeTool === "hand"}
+          selectionOnDrag={activeTool === "select"}
           fitView
           fitViewOptions={{ padding: 0.2 }}
           minZoom={0.15}
@@ -849,6 +918,52 @@ function WorkflowEditorInner({
             className="!bg-white !border !border-gray-200 !rounded-xl !shadow-sm"
             showInteractive={false}
           />
+
+          {/* ── Tool mode indicator ── */}
+          <Panel position="bottom-center">
+            <div className="mb-3 flex items-center gap-0.5 bg-white/95 border border-gray-200 rounded-xl px-1.5 py-1.5 shadow-sm backdrop-blur-sm">
+              <button
+                onClick={() => setActiveTool("select")}
+                title="Selecionar (V)"
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                  activeTool === "select"
+                    ? "bg-[var(--color-brand)] text-white"
+                    : "text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                }`}
+              >
+                <MousePointer className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setActiveTool("hand")}
+                title="Mão / Pan (H)"
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                  activeTool === "hand"
+                    ? "bg-[var(--color-brand)] text-white"
+                    : "text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                }`}
+              >
+                <Hand className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </Panel>
+
+          {/* ── Multi-select counter + batch export ── */}
+          {selectedCount > 1 && (
+            <Panel position="top-right">
+              <div className="mt-2 mr-2 flex items-center gap-3 bg-white/95 border border-gray-200 rounded-xl px-4 py-2 shadow-lg backdrop-blur-sm">
+                <span className="text-xs font-semibold text-gray-700">
+                  {selectedCount} itens selecionados
+                </span>
+                <button
+                  onClick={handleBatchDownload}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--color-brand)] text-white text-xs font-medium hover:opacity-90 transition-opacity"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Exportar seleção
+                </button>
+              </div>
+            </Panel>
+          )}
           <MiniMap
             className="!bg-white !border !border-gray-200 !rounded-xl !shadow-sm"
             nodeColor="#F97316"

@@ -28,8 +28,12 @@ const ASPECT_RATIOS = [
   { value: "16:9", label: "16:9", hint: "Paisagem" },
   { value: "9:16", label: "9:16", hint: "Retrato" },
   { value: "4:5",  label: "4:5",  hint: "Social" },
+  { value: "5:4",  label: "5:4",  hint: "Banner" },
   { value: "3:2",  label: "3:2",  hint: "Foto" },
   { value: "2:3",  label: "2:3",  hint: "Vertical" },
+  { value: "4:3",  label: "4:3",  hint: "Monitor" },
+  { value: "3:4",  label: "3:4",  hint: "Retrato+" },
+  { value: "21:9", label: "21:9", hint: "Cinema" },
 ];
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -242,7 +246,7 @@ function ContextualBody({
 
       {/* Aspect ratio */}
       <Section icon={<Images className="w-3.5 h-3.5" />} title="Proporção">
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-5 gap-1.5">
           {ASPECT_RATIOS.map((ar) => (
             <button
               key={ar.value}

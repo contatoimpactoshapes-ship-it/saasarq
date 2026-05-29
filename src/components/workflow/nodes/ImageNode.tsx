@@ -25,12 +25,23 @@ export interface ImageNodeData extends Record<string, unknown> {
   status?:       NodeStatus;
   uploading?:    boolean;
   prompt?:       string;       // per-image prompt (edited in sidebar contextual panel)
-  aspectRatio?:  string;       // per-image aspect ratio — "1:1" | "16:9" | "9:16" | "4:5" | "3:2" | "2:3"
+  aspectRatio?:  string;       // "1:1"|"16:9"|"9:16"|"4:5"|"5:4"|"3:2"|"2:3"|"4:3"|"3:4"|"21:9"
   nodeModel?:    string;       // per-image model override
   nodeStrength?: number;       // per-image strength override
   nodeOutputs?:  number;       // per-image variations override
   errorMessage?: string;
   generationId?: string;       // DB generation id — used to resume polling after page restore
+  folderId?:     string;       // future: folder/sub-environment id
+  folderPath?:   string;       // future: display path, e.g. "Sala > Renders"
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getRatioCss(ratio?: string): string {
+  if (!ratio) return "1 / 1";
+  const [w, h] = ratio.split(":").map(Number);
+  if (!w || !h || isNaN(w) || isNaN(h)) return "1 / 1";
+  return `${w} / ${h}`;
 }
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -108,7 +119,7 @@ function ImageNodeComponent({ data, selected }: NodeProps) {
         </div>
 
         {/* ── Image area ── */}
-        <div className="relative w-full aspect-square bg-gray-50 overflow-hidden">
+        <div className="relative w-full bg-gray-50 overflow-hidden" style={{ aspectRatio: getRatioCss(d.aspectRatio) }}>
           {displayUrl && !isProcessing && (!isPending || d.uploading) ? (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
