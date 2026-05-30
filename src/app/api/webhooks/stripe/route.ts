@@ -117,9 +117,12 @@ export async function POST(req: NextRequest) {
         });
 
         if (user) {
+          // Only downgrade plan and clear subscription ID.
+          // credits are intentionally NOT zeroed: pack credits are paid assets
+          // that must survive subscription cancellation.
           await prisma.user.update({
             where: { id: user.id },
-            data:  { plan: "FREE", stripeSubId: null, credits: 0 },
+            data:  { plan: "FREE", stripeSubId: null },
           });
         }
         break;
