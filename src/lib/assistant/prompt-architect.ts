@@ -438,6 +438,7 @@ export interface PromptArchitectResponse {
   suggestions:            string[];
   recommendedModel:       string;
   recommendedAspectRatio: string;
+  analysisMode?:          "fallback" | "anthropic";
 }
 
 export interface ProjectContext {

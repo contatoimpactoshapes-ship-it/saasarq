@@ -175,7 +175,8 @@ export async function POST(req: NextRequest) {
     // ── No API key — return structured fallback ─────────────────────────────
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
     if (!anthropicKey) {
-      return NextResponse.json(buildFallback(message, hasImage));
+      console.warn("[prompt-architect] ANTHROPIC_API_KEY not set — returning fallback");
+      return NextResponse.json({ ...buildFallback(message, hasImage), analysisMode: "fallback" });
     }
 
     // ── Resolve contextual system prompt ────────────────────────────────────
@@ -227,7 +228,7 @@ export async function POST(req: NextRequest) {
 
     if (!apiRes.ok) {
       console.error("[prompt-architect] Anthropic error:", await apiRes.text());
-      return NextResponse.json(buildFallback(message, hasImage));
+      return NextResponse.json({ ...buildFallback(message, hasImage), analysisMode: "fallback" });
     }
 
     const apiData = await apiRes.json() as {
@@ -263,7 +264,7 @@ export async function POST(req: NextRequest) {
       console.warn(`[prompt-architect] TRUNCATED — response cut at ${MAX_TOKENS} tokens. Consider increasing MAX_TOKENS further.`);
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, analysisMode: "anthropic" });
   } catch (err) {
     console.error("[POST /api/assistant/prompt-architect]", err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
