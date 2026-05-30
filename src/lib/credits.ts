@@ -110,6 +110,70 @@ export async function hasEnoughCredits(
   return (user?.credits ?? 0) >= required;
 }
 
+// ── Atomic conditional debit ──────────────────────────────────────────────────
+// Returns true if the debit succeeded, false if the user has insufficient
+// credits. Uses a conditional UPDATE so concurrent requests can never both
+// pass when the shared balance is only enough for one.
+export async function tryDebitCredits(
+  userId:      string,
+  amount:      number,
+  description: string,
+): Promise<boolean> {
+  if (isLocalInfiniteCredits()) {
+    console.log("[LOCAL_INFINITE_CREDITS ativo] tryDebitCredits ignorado:", description, amount);
+    return true;
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
+  if (user?.isAdmin) return true;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Single UPDATE with WHERE credits >= amount — atomically checks + debits.
+      // If no row is affected (balance too low), the thrown error aborts the tx.
+      const count = await tx.$executeRaw`
+        UPDATE "User"
+        SET credits = credits - ${amount}
+        WHERE id = ${userId}
+          AND credits >= ${amount}
+      `;
+
+      if (count === 0) throw new Error("INSUFFICIENT_CREDITS");
+
+      await tx.creditTransaction.create({
+        data: { userId, amount: -amount, type: "DEBIT", description },
+      });
+    });
+    return true;
+  } catch (err) {
+    if (err instanceof Error && err.message === "INSUFFICIENT_CREDITS") return false;
+    throw err;
+  }
+}
+
+// ── Idempotent fail + conditional refund ──────────────────────────────────────
+// Marks a generation as FAILED only if it is not already in a terminal state
+// (FAILED or COMPLETED). Issues a credit refund only when this call is the
+// first to transition the record — preventing double-refunds when both the
+// FAL webhook and the status-polling route detect the same failure.
+export async function failGenerationAndRefund(
+  generationId:      string,
+  userId:            string,
+  creditsCost:       number,
+  errorMessage:      string,
+  refundDescription: string,
+): Promise<void> {
+  const { count } = await prisma.generation.updateMany({
+    where: { id: generationId, status: { notIn: ["FAILED", "COMPLETED"] } },
+    data:  { status: "FAILED", errorMessage },
+  });
+
+  // count === 0 means another process already settled this generation.
+  if (count > 0) {
+    await refundCredits(userId, creditsCost, refundDescription);
+  }
+}
+
 export async function getOrCreateUser(clerkId: string, email: string) {
   const adminEmails = (process.env.ADMIN_EMAILS ?? "")
     .split(",")

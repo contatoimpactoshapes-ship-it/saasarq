@@ -1,16 +1,20 @@
 import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { refundCredits } from "@/lib/credits";
+import { failGenerationAndRefund } from "@/lib/credits";
 import { emitAdminEvent } from "@/lib/realtime";
 import { saveImageFromUrl } from "@/lib/r2";
 
 function validateWebhookSecret(req: NextRequest): boolean {
   const expected = process.env.FAL_WEBHOOK_SECRET;
-  // If no secret is configured, skip enforcement (backward compat for inflight jobs).
-  // Set FAL_WEBHOOK_SECRET in production to enforce validation.
   if (!expected) {
-    console.warn("[FAL webhook] FAL_WEBHOOK_SECRET not set — running without auth");
+    // In production, a missing secret is a misconfiguration — reject the request.
+    // In development, allow through with a warning so local testing still works.
+    if (process.env.NODE_ENV === "production") {
+      console.error("[FAL webhook] FAL_WEBHOOK_SECRET not set in production — rejecting request");
+      return false;
+    }
+    console.warn("[FAL webhook] FAL_WEBHOOK_SECRET not set — running without auth (dev only)");
     return true;
   }
   const provided = req.nextUrl.searchParams.get("secret") ?? "";
@@ -80,18 +84,15 @@ export async function POST(req: NextRequest) {
       });
       emitAdminEvent({ type: "generation:completed", id: crypto.randomUUID(), ts: Date.now(), generationId, userId: generation.user.id, tool: generation.tool, creditsCost: generation.creditsCost });
     } else if (isError) {
-      await refundCredits(
+      // Idempotent: only refunds if this call is the first to mark FAILED.
+      // Prevents double-refund when both the webhook and status polling fire.
+      await failGenerationAndRefund(
+        generationId,
         generation.user.id,
         generation.creditsCost,
-        `Reembolso automático: falha via webhook ${generationId}`
+        body.error ?? "Falha no processamento",
+        `Reembolso automático: falha via webhook ${generationId}`,
       );
-      await prisma.generation.update({
-        where: { id: generationId },
-        data: {
-          status: "FAILED",
-          errorMessage: body.error ?? "Falha no processamento",
-        },
-      });
       emitAdminEvent({ type: "generation:failed", id: crypto.randomUUID(), ts: Date.now(), generationId, userId: generation.user.id, tool: generation.tool, error: body.error ?? "Falha no processamento" });
     }
 

@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getFalJobStatus, getFalJobResult } from "@/lib/fal";
-import { refundCredits } from "@/lib/credits";
+import { failGenerationAndRefund } from "@/lib/credits";
 import { saveImageFromUrl } from "@/lib/r2";
 import { getFalModelId } from "@/lib/model-lookup";
 import { sanitizeError } from "@/lib/errors";
@@ -108,11 +108,14 @@ export async function GET(
       if (vid.status === "failed" || vid.status === "error") {
         const raw      = vid.error?.message ?? "Falha na geração Sora";
         const friendly = sanitizeError(raw);
-        await refundCredits(generation.user.id, generation.creditsCost, `Reembolso: Sora falhou`);
-        await prisma.generation.update({
-          where: { id: generation.id },
-          data:  { status: "FAILED", errorMessage: raw },
-        });
+        // Idempotent: only refunds if this call is the first to mark FAILED.
+        await failGenerationAndRefund(
+          generation.id,
+          generation.user.id,
+          generation.creditsCost,
+          raw,
+          "Reembolso: Sora falhou",
+        );
         return NextResponse.json({ status: "FAILED", error: friendly, generationId: generation.id });
       }
       // Still queued/processing
@@ -156,15 +159,15 @@ export async function GET(
     }
 
     if ((falStatus.status as string) === "FAILED") {
-      await refundCredits(
+      // Idempotent: only refunds if this call is the first to mark FAILED.
+      // Prevents double-refund when FAL webhook fires concurrently with polling.
+      await failGenerationAndRefund(
+        generation.id,
         generation.user.id,
         generation.creditsCost,
-        `Reembolso automático: falha na geração ${generation.id}`
+        "Falha no processamento da IA",
+        `Reembolso automático: falha na geração ${generation.id}`,
       );
-      await prisma.generation.update({
-        where: { id: generation.id },
-        data: { status: "FAILED", errorMessage: "Falha no processamento da IA" },
-      });
 
       return NextResponse.json({
         status: "FAILED",

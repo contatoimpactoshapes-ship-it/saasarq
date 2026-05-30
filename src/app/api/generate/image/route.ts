@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { emitAdminEvent } from "@/lib/realtime";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getOrCreateUser, debitCredits, refundCredits, hasEnoughCredits } from "@/lib/credits";
+import { getOrCreateUser, tryDebitCredits, refundCredits } from "@/lib/credits";
 import { submitFalJobRaw, buildFalWebhookUrl } from "@/lib/fal";
 import { getImageModel } from "@/lib/models";
 import { meetsMinPlan, checkConcurrencyLimit, ECONOMY_ERRORS } from "@/lib/economy";
@@ -83,8 +83,16 @@ export async function POST(req: NextRequest) {
     }
 
     const totalCost = imageModel.credits * numImages;
-    const enough = await hasEnoughCredits(user.id, totalCost);
-    if (!enough) {
+
+    // Atomic check-and-debit: returns false if balance is insufficient.
+    // Runs a conditional UPDATE (WHERE credits >= amount) so concurrent
+    // requests cannot both pass when the balance covers only one of them.
+    const debited = await tryDebitCredits(
+      user.id,
+      totalCost,
+      `Geração: ${imageModel.name} x${numImages}`,
+    );
+    if (!debited) {
       return NextResponse.json(
         {
           error:    "Créditos insuficientes",
@@ -108,8 +116,6 @@ export async function POST(req: NextRequest) {
         creditsCost: totalCost,
       },
     });
-
-    await debitCredits(user.id, totalCost, `Geração: ${imageModel.name} x${numImages}`);
 
     const falInput: Record<string, unknown> = {
       prompt,

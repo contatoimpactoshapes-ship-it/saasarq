@@ -49,23 +49,18 @@ export async function POST(req: NextRequest) {
         break;
       }
 
-      case "customer.subscription.created":
-      case "customer.subscription.updated": {
+      case "customer.subscription.created": {
+        // New subscription: set credits to the plan allocation (fresh start).
         const sub     = event.data.object as Stripe.Subscription;
         const priceId = sub.items.data[0]?.price.id;
-
         const planMap: Record<string, Plan> = {
           [process.env.STRIPE_ESSENTIAL_PRICE_ID!]:    "ESSENTIAL",
           [process.env.STRIPE_PREMIUM_PRICE_ID!]:      "PREMIUM",
           [process.env.STRIPE_PREMIUM_PLUS_PRICE_ID!]: "PREMIUM_PLUS",
           [process.env.STRIPE_PRO_PRICE_ID!]:          "PRO",
         };
-
         const newPlan = planMap[priceId] ?? "FREE";
-        const user    = await prisma.user.findFirst({
-          where: { stripeCustomerId: sub.customer as string },
-        });
-
+        const user    = await prisma.user.findFirst({ where: { stripeCustomerId: sub.customer as string } });
         if (user) {
           const creditsToAdd = PLAN_CREDITS[newPlan] ?? 0;
           await prisma.$transaction([
@@ -73,18 +68,43 @@ export async function POST(req: NextRequest) {
               where: { id: user.id },
               data:  { plan: newPlan, stripeSubId: sub.id, credits: creditsToAdd },
             }),
-            ...(creditsToAdd > 0
-              ? [
-                  prisma.creditTransaction.create({
-                    data: {
-                      userId:      user.id,
-                      amount:      creditsToAdd,
-                      type:        "PURCHASE",
-                      description: `Créditos do plano ${newPlan} — renovação mensal`,
-                    },
-                  }),
-                ]
-              : []),
+            ...(creditsToAdd > 0 ? [prisma.creditTransaction.create({
+              data: { userId: user.id, amount: creditsToAdd, type: "PURCHASE", description: `Créditos do plano ${newPlan} — nova assinatura` },
+            })] : []),
+          ]);
+        }
+        break;
+      }
+
+      case "customer.subscription.updated": {
+        // Plan change or renewal: never reduce an existing balance.
+        // Uses GREATEST(current, planCredits) so purchased pack credits and
+        // accumulated rollovers are preserved across upgrades and renewals.
+        const sub     = event.data.object as Stripe.Subscription;
+        const priceId = sub.items.data[0]?.price.id;
+        const planMap: Record<string, Plan> = {
+          [process.env.STRIPE_ESSENTIAL_PRICE_ID!]:    "ESSENTIAL",
+          [process.env.STRIPE_PREMIUM_PRICE_ID!]:      "PREMIUM",
+          [process.env.STRIPE_PREMIUM_PLUS_PRICE_ID!]: "PREMIUM_PLUS",
+          [process.env.STRIPE_PRO_PRICE_ID!]:          "PRO",
+        };
+        const newPlan = planMap[priceId] ?? "FREE";
+        const user    = await prisma.user.findFirst({ where: { stripeCustomerId: sub.customer as string } });
+        if (user) {
+          const planCredits    = PLAN_CREDITS[newPlan] ?? 0;
+          const currentCredits = user.credits ?? 0;
+          // Only increase: if the user already has more credits (from packs or
+          // accumulated balance), keep their balance intact.
+          const newBalance  = Math.max(currentCredits, planCredits);
+          const actualAdded = newBalance - currentCredits;
+          await prisma.$transaction([
+            prisma.user.update({
+              where: { id: user.id },
+              data:  { plan: newPlan, stripeSubId: sub.id, credits: newBalance },
+            }),
+            ...(actualAdded > 0 ? [prisma.creditTransaction.create({
+              data: { userId: user.id, amount: actualAdded, type: "PURCHASE", description: `Créditos do plano ${newPlan} — atualização/renovação` },
+            })] : []),
           ]);
         }
         break;

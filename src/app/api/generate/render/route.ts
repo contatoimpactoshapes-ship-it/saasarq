@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { emitAdminEvent } from "@/lib/realtime";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getOrCreateUser, debitCredits, refundCredits, hasEnoughCredits } from "@/lib/credits";
+import { getOrCreateUser, tryDebitCredits, refundCredits } from "@/lib/credits";
 import { submitFalJobRaw, buildFalWebhookUrl } from "@/lib/fal";
 import { getFalModelId } from "@/lib/model-lookup";
 import { logAndSanitize, sanitizeError } from "@/lib/errors";
@@ -77,8 +77,11 @@ export async function POST(req: NextRequest) {
     const email = clerkUser?.emailAddresses[0]?.emailAddress ?? "";
     const user = await getOrCreateUser(clerkId, email);
 
-    const enough = await hasEnoughCredits(user.id, CREDIT_COST);
-    if (!enough) {
+    // Atomic check-and-debit: returns false if balance is insufficient.
+    // Runs a conditional UPDATE (WHERE credits >= amount) so concurrent
+    // requests cannot both pass when the balance covers only one of them.
+    const debited = await tryDebitCredits(user.id, CREDIT_COST, `Renderização 3D — ${style}`);
+    if (!debited) {
       return NextResponse.json(
         { error: "Créditos insuficientes", required: CREDIT_COST },
         { status: 402 }
@@ -187,8 +190,6 @@ export async function POST(req: NextRequest) {
         creditsCost: CREDIT_COST,
       },
     });
-
-    await debitCredits(user.id, CREDIT_COST, `Renderização 3D — ${style}`);
 
     const falInput = buildFalInput();
 
