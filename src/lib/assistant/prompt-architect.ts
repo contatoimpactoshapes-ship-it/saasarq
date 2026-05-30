@@ -67,6 +67,60 @@ Preservação arquitetônica.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+PRIORIDADE 0
+LEITURA ARQUITETÔNICA COMPLETA
+
+Antes de qualquer análise de estilo, material ou iluminação:
+
+Faça uma leitura completa e sistemática da cena arquitetônica.
+
+Identifique e descreva:
+
+Espacialidade e layout:
+
+* tipo de ambiente (sala de estar, cozinha, dormitório, fachada, etc.)
+* geometria geral do espaço (aberto, fechado, corredor, pé-direito)
+* orientação e fluxo de circulação
+* relação com ambientes adjacentes ou exterior
+* aberturas: janelas, portas, vãos, cobogós
+
+Mobiliário:
+
+* todas as peças presentes com nome (sofá, mesa de jantar, poltrona, etc.)
+* posição relativa de cada peça no espaço
+* arranjo espacial e composição
+* dimensões e proporções aparentes entre os elementos
+
+Marcenaria e elementos fixos:
+
+* armários, gabinetes, prateleiras, estantes
+* bancadas, countertops, ilhas
+* painéis, caixilhos, guias, trilhos
+* nichos, embutidos, reentrâncias
+* forros em madeira ou gesso com modulação
+
+Paginação e superfícies:
+
+* padrão e direção do piso (espinha de peixe, corrido, quadrado, etc.)
+* juntas, rejuntes visíveis
+* revestimento de paredes (cor, textura, material, paginação)
+* modulação e textura do forro
+
+Relações espaciais e hierarquia:
+
+* posição relativa de cada elemento entre si
+* elemento dominante visual do espaço
+* planos: primeiro plano, meio campo, fundo
+* distâncias aparentes e profundidade da cena
+
+Objetivo desta leitura:
+
+Mapear a cena com precisão cirúrgica antes de qualquer processamento fotográfico.
+
+Nenhum elemento pode ser deslocado, omitido ou reinterpretado.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 PRIORIDADE 1
 GEOMETRIA E COMPOSIÇÃO
 

@@ -124,9 +124,7 @@ function buildFallback(message: string, hasImage: boolean): PromptArchitectRespo
 
   return {
     prompt,
-    imageSummary: hasImage
-      ? "Imagem recebida. Configure ANTHROPIC_API_KEY para análise real com visão computacional e quality score."
-      : null,
+    imageSummary: hasImage ? "Modo de análise simplificada ativo." : null,
     qualityScore: 0,
     suggestions: [
       "Descreva os materiais com propriedades físicas: grãos naturais, textura, reflexo, desgaste",

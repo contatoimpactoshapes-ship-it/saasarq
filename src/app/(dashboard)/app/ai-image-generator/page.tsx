@@ -86,7 +86,7 @@ function AIImageGeneratorInner() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   // ── Global rendering parameters ──────────────────────────────
-  const [renderModel, setRenderModel] = useState("render-flux-dev");
+  const [renderModel, setRenderModel] = useState(searchParams.get("renderModel") ?? "render-flux-dev");
   const [strength, setStrength]       = useState(0.82);
   const [numOutputs, setNumOutputs]   = useState(1);
 
@@ -613,7 +613,9 @@ function AIImageGeneratorInner() {
       )}
 
       {/* ── 3D RENDER MODE ── */}
-      {mode === "render3d" && <WorkflowEditor />}
+      {mode === "render3d" && (
+        <WorkflowEditor initialPrompt={searchParams.get("prompt") ?? undefined} />
+      )}
 
       {/* Hidden file input */}
       <input

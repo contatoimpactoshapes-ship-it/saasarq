@@ -46,16 +46,13 @@ const STARTERS = [
   "Escritório open-space, concreto exposto, luz zenital",
 ];
 
-const MODEL_TO_ID: Record<string, string> = {
-  "Nano Banana Pro": "nano-banana-pro",
-  "Nano Banana 2":   "nano-banana-2",
-  "Flux Pro":        "flux2-pro",
-  "Recraft":         "recraft-v4-1",
-  "Luma Uni":        "luma-uni-1",
+const MODEL_TO_RENDER_ID: Record<string, string> = {
+  "Nano Banana Pro": "render-nano-banana-pro",
+  "Nano Banana 2":   "render-nano-banana-2",
+  "Flux Pro":        "render-flux-pro",
+  "Recraft":         "render-nano-banana-2",
+  "Luma Uni":        "render-nano-banana-2",
 };
-
-const RATIO_REMAP: Record<string, string> = { "4:5": "3:4", "3:2": "4:3" };
-function remapRatio(r: string): string { return RATIO_REMAP[r] ?? r; }
 
 // ── Score helpers ─────────────────────────────────────────────────────────────
 
@@ -257,10 +254,9 @@ function StudioResults({
   }
 
   function deployToWorkspace() {
-    const modelId = MODEL_TO_ID[result.recommendedModel] ?? "auto";
-    const ratio   = remapRatio(result.recommendedAspectRatio);
+    const modelId = MODEL_TO_RENDER_ID[result.recommendedModel] ?? "render-nano-banana-2";
     router.push(
-      `/app/ai-image-generator?prompt=${encodeURIComponent(result.prompt)}&model=${encodeURIComponent(modelId)}&aspectRatio=${encodeURIComponent(ratio)}`
+      `/app/ai-image-generator?mode=render3d&prompt=${encodeURIComponent(result.prompt)}&renderModel=${encodeURIComponent(modelId)}&aspectRatio=${encodeURIComponent(result.recommendedAspectRatio)}`
     );
   }
 
@@ -347,7 +343,7 @@ function StudioResults({
           onClick={deployToWorkspace}
           className="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 transition-colors font-medium"
         >
-          <Zap className="w-3 h-3" />Deploy to Workspace
+          <Zap className="w-3 h-3" />Usar na Renderização
           <ChevronRight className="w-3 h-3 opacity-60" />
         </button>
         <button

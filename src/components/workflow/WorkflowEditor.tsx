@@ -80,11 +80,13 @@ function downloadUrl(url: string, filename = "render.png") {
 // ── Inner component ───────────────────────────────────────────────────────────
 
 function WorkflowEditorInner({
-  spaceId:    propSpaceId,
-  workflowId: propWorkflowId,
+  spaceId:       propSpaceId,
+  workflowId:    propWorkflowId,
+  initialPrompt: propInitialPrompt,
 }: {
-  spaceId?:    string;
-  workflowId?: string;
+  spaceId?:       string;
+  workflowId?:    string;
+  initialPrompt?: string;
 }) {
   const { fitView, setViewport, getViewport, getNode } = useReactFlow();
 
@@ -94,7 +96,7 @@ function WorkflowEditorInner({
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  const [globalPrompt, setGlobalPrompt] = useState("");
+  const [globalPrompt, setGlobalPrompt] = useState(propInitialPrompt ?? "");
   const [renderModel,  setRenderModel]  = useState("render-flux-dev");
   const [strength,     setStrength]     = useState(0.82);
   const [numOutputs,   setNumOutputs]   = useState(1);
@@ -251,7 +253,7 @@ function WorkflowEditorInner({
 
     async function restoreCanvas(canvas: WorkflowCanvasData) {
       if (canvas.settings) {
-        setGlobalPrompt(canvas.settings.globalPrompt ?? "");
+        setGlobalPrompt(canvas.settings.globalPrompt || propInitialPrompt || "");
         setRenderModel(canvas.settings.renderModel ?? "render-flux-dev");
         setStrength(canvas.settings.strength ?? 0.82);
         setNumOutputs(canvas.settings.numOutputs ?? 1);
@@ -1058,13 +1060,15 @@ function WorkflowEditorInner({
 export function WorkflowEditor({
   spaceId,
   workflowId,
+  initialPrompt,
 }: {
-  spaceId?:    string;
-  workflowId?: string;
+  spaceId?:       string;
+  workflowId?:    string;
+  initialPrompt?: string;
 } = {}) {
   return (
     <ReactFlowProvider>
-      <WorkflowEditorInner spaceId={spaceId} workflowId={workflowId} />
+      <WorkflowEditorInner spaceId={spaceId} workflowId={workflowId} initialPrompt={initialPrompt} />
     </ReactFlowProvider>
   );
 }
