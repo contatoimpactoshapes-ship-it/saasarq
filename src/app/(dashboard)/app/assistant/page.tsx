@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
   Upload, X, ImagePlus, Send, Copy, Check,
-  RefreshCw, Trash2, Zap, Cpu,
+  RefreshCw, Trash2, Zap, Cpu, Loader2,
   Maximize2, Lightbulb, ScanLine, ChevronRight,
   Clock, FolderOpen, Palette, Sun, Layers,
   Aperture, Building2,
@@ -230,12 +230,14 @@ function StudioResults({
   onClear,
   spaceName,
   imageUrl,
+  imageUrlPending,
 }: {
   result: PromptArchitectResponse;
   onRefine: (prompt: string) => void;
   onClear: () => void;
   spaceName?: string;
   imageUrl?: string | null;
+  imageUrlPending?: boolean;
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
@@ -342,11 +344,16 @@ function StudioResults({
           <Copy className="w-3 h-3" />Copiar prompt
         </button>
         <button
-          onClick={deployToWorkspace}
-          className="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 transition-colors font-medium"
+          onClick={imageUrlPending ? undefined : deployToWorkspace}
+          disabled={!!imageUrlPending}
+          title={imageUrlPending ? "Aguardando salvar imagem de referência…" : undefined}
+          className={`flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg bg-zinc-900 text-white font-medium transition-colors ${imageUrlPending ? "opacity-50 cursor-wait" : "hover:bg-zinc-800"}`}
         >
-          <Zap className="w-3 h-3" />Usar na Renderização
-          <ChevronRight className="w-3 h-3 opacity-60" />
+          {imageUrlPending
+            ? <Loader2 className="w-3 h-3 animate-spin" />
+            : <Zap className="w-3 h-3" />}
+          Usar na Renderização
+          {!imageUrlPending && <ChevronRight className="w-3 h-3 opacity-60" />}
         </button>
         <button
           onClick={() => onRefine(result.prompt)}
@@ -1000,6 +1007,7 @@ export default function AssistantPage() {
                   onClear={handleClear}
                   spaceName={spaces.find((s) => s.id === selectedSpaceId)?.name}
                   imageUrl={studioImageR2Url}
+                  imageUrlPending={studioImage !== null && studioImageR2Url === null}
                 />
               ) : null}
             </main>

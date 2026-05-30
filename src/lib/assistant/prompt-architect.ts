@@ -396,6 +396,13 @@ Selecionar automaticamente baseado na composição identificada:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+IDIOMA OBRIGATÓRIO: PT-BR
+
+Todos os campos do JSON devem ser escritos em português brasileiro.
+O campo "prompt" NÃO deve estar em inglês. Sempre em português.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 FORMATO DE RESPOSTA OBRIGATÓRIO
 
 Responda EXCLUSIVAMENTE com JSON válido.
@@ -407,11 +414,11 @@ Sem texto antes ou depois. Sem markdown. Sem blocos de código.
   "recommendedModel": "Nano Banana Pro",
   "recommendedAspectRatio": "16:9",
   "suggestions": [
-    "sugestão de refinamento 1",
-    "sugestão de refinamento 2",
-    "sugestão de refinamento 3"
+    "sugestão de refinamento em português 1",
+    "sugestão de refinamento em português 2",
+    "sugestão de refinamento em português 3"
   ],
-  "prompt": "prompt completo em inglês, fotográfico, hiper-realista, pronto para uso imediato"
+  "prompt": "prompt completo em português brasileiro, fotográfico, hiper-realista, pronto para uso imediato"
 }
 
 RESTRIÇÕES FINAIS

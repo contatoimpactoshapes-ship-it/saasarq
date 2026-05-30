@@ -119,8 +119,8 @@ async function resolveSystemPrompt(
 
 function buildFallback(message: string, hasImage: boolean): PromptArchitectResponse {
   const prompt = message.trim()
-    ? `${message.trim()}, architectural photography, natural light, physically accurate materials, photorealistic render, 8K ultra-detailed, no CGI artifacts, editorial quality`
-    : "Modern minimalist interior, floor-to-ceiling windows, warm oak flooring with natural grain, soft diffused daylight, full-frame camera 35mm lens, physically accurate materials, editorial architectural photography, 8K ultra-detailed";
+    ? `${message.trim()}, fotografia arquitetônica profissional, luz natural difusa, materiais fisicamente precisos, renderização fotorrealista hiper-realista, ultra-detalhado 8K, sem artefatos de render, qualidade editorial premium`
+    : "Interior contemporâneo minimalista, janelas do piso ao teto, piso em carvalho natural com veios expressivos, luz natural suave e difusa, câmera full-frame lente 35mm nível dos olhos, materiais fisicamente precisos, fotografia arquitetônica editorial, ultra-detalhado 8K";
 
   return {
     prompt,
@@ -128,8 +128,8 @@ function buildFallback(message: string, hasImage: boolean): PromptArchitectRespo
     qualityScore: 0,
     suggestions: [
       "Descreva os materiais com propriedades físicas: grãos naturais, textura, reflexo, desgaste",
-      "Especifique iluminação: origem, direção, temperatura de cor (ex: warm 3000K diffused daylight)",
-      "Defina câmera: altura, distância focal, perspectiva (ex: eye-level, 35mm, wide-angle)",
+      "Especifique a iluminação: origem, direção, temperatura de cor (ex: luz difusa quente 3000K)",
+      "Defina a câmera: altura, distância focal, perspectiva (ex: nível dos olhos, 35mm, grande angular)",
     ],
     recommendedModel:       "Nano Banana 2",
     recommendedAspectRatio: "16:9",
