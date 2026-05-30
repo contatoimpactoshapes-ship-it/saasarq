@@ -466,6 +466,23 @@ Identificar:
 * decoração fixa: objetos de arte, quadros, tapetes, luminárias decorativas
 * detalhes: rodapés, frisos, trilhos, puxadores, rodameios
 
+preservationConstraints
+
+Baseando-se em TUDO que foi analisado acima, listar as restrições absolutas.
+Cada item é uma regra que o modelo de IA DEVE obedecer — não pode reinterpretar.
+Use verbos imperativos: "Preservar", "Manter", "Não alterar", "Proibido modificar".
+Seja específico: não "preservar o layout" mas "preservar a integração sala-jantar com cozinha ao fundo sem divisória".
+Inclua obrigatoriamente restrições sobre:
+* layout e setorização exata da cena
+* volumetria e pé-direito
+* posição de cada móvel identificado
+* localização e tipo de cada abertura
+* enquadramento e perspectiva da câmera
+* materiais dominantes de cada superfície principal
+* características e direção da iluminação dominante
+Mínimo 6 restrições. Máximo 12.
+Lista de strings curtas e objetivas.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 IDIOMA OBRIGATÓRIO: PT-BR
@@ -488,6 +505,15 @@ Sem texto antes ou depois. Sem markdown. Sem blocos de código.
   "cameraAnalysis": "análise completa da câmera e composição em português",
   "furnitureAnalysis": "análise completa do mobiliário em português",
   "architecturalElements": "análise completa dos elementos arquitetônicos em português",
+  "preservationConstraints": [
+    "Preservar exatamente o layout: [descrever integração espacial específica]",
+    "Manter a volumetria e pé-direito originais",
+    "Não alterar a posição de [móvel principal identificado]",
+    "Preservar as aberturas [tipo e localização exata]",
+    "Manter o enquadramento: câmera a [altura], lente [focal], [perspectiva]",
+    "Preservar os materiais: [material por superfície]",
+    "Manter a iluminação [natural/artificial] [direção] [temperatura]K"
+  ],
   "qualityScore": 82,
   "recommendedModel": "Nano Banana Pro",
   "recommendedAspectRatio": "16:9",
@@ -496,7 +522,7 @@ Sem texto antes ou depois. Sem markdown. Sem blocos de código.
     "sugestão de refinamento em português 2",
     "sugestão de refinamento em português 3"
   ],
-  "prompt": "prompt fotográfico completo em português brasileiro, sintetizando todas as análises acima em uma descrição hiper-realista que preserva integralmente a cena original — layout, materiais, iluminação, câmera, mobiliário e elementos arquitetônicos"
+  "prompt": "PRESERVAR OBRIGATORIAMENTE:\n• [item 1 de preservationConstraints]\n• [item 2 de preservationConstraints]\n• [todos os demais itens]\n\nPROIBIDO:\n• Reinventar o ambiente\n• Alterar distribuição espacial\n• Mudar arquitetura existente\n• Mover mobiliário\n• Alterar orientação ou enquadramento da câmera\n\n[Descrição fotográfica hiper-realista completa sintetizando layoutAnalysis, materialAnalysis, lightingAnalysis, cameraAnalysis, furnitureAnalysis e architecturalElements — fotografia editorial profissional, anti-CGI, zero alucinação]"
 }
 
 RESTRIÇÕES FINAIS
@@ -525,12 +551,14 @@ export interface PromptArchitectResponse {
   recommendedAspectRatio:  string;
   analysisMode?:           "fallback" | "anthropic";
   // Structured architectural analysis — v2 fields (optional: absent on fallback & history restore)
-  layoutAnalysis?:         string | null;
-  materialAnalysis?:       string | null;
-  lightingAnalysis?:       string | null;
-  cameraAnalysis?:         string | null;
-  furnitureAnalysis?:      string | null;
-  architecturalElements?:  string | null;
+  layoutAnalysis?:          string | null;
+  materialAnalysis?:        string | null;
+  lightingAnalysis?:        string | null;
+  cameraAnalysis?:          string | null;
+  furnitureAnalysis?:       string | null;
+  architecturalElements?:   string | null;
+  // Preservation layer — v3 (list of hard constraints embedded in the prompt)
+  preservationConstraints?: string[];
 }
 
 export interface ProjectContext {

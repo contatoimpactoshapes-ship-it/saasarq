@@ -56,6 +56,10 @@ function parseStructured(raw: string): PromptArchitectResponse {
       cameraAnalysis:         str("cameraAnalysis"),
       furnitureAnalysis:      str("furnitureAnalysis"),
       architecturalElements:  str("architecturalElements"),
+      // v3 preservation layer
+      preservationConstraints: Array.isArray(parsed.preservationConstraints)
+        ? (parsed.preservationConstraints as unknown[]).filter((s): s is string => typeof s === "string")
+        : [],
     };
   }
 

@@ -8,7 +8,7 @@ import {
   RefreshCw, Trash2, Zap, Cpu, Loader2,
   Maximize2, Lightbulb, ScanLine, ChevronRight,
   Clock, FolderOpen, Palette, Sun, Layers,
-  Aperture, Building2, LayoutGrid, Armchair,
+  Aperture, Building2, LayoutGrid, Armchair, Shield,
 } from "lucide-react";
 import { toast } from "sonner";
 import { TopBar } from "@/components/layout/TopBar";
@@ -266,6 +266,28 @@ function ArchitecturalAnalysis({ result }: { result: PromptArchitectResponse }) 
   );
 }
 
+// ── Preservation constraints panel ────────────────────────────────────────────
+
+function PreservationConstraints({ constraints }: { constraints: string[] }) {
+  if (!constraints.length) return null;
+  return (
+    <div className="bg-amber-50 border border-amber-200/80 rounded-xl overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-amber-200/60">
+        <Shield className="w-3 h-3 text-amber-500 shrink-0" />
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Restrições de Preservação</span>
+      </div>
+      <ul className="p-4 space-y-1.5">
+        {constraints.map((c, i) => (
+          <li key={i} className="flex items-start gap-2">
+            <span className="mt-1.5 w-1 h-1 rounded-full bg-amber-400 shrink-0" />
+            <span className="text-xs text-amber-800 leading-relaxed">{c}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function StudioResults({
   result,
   onRefine,
@@ -331,6 +353,8 @@ function StudioResults({
       )}
 
       <ArchitecturalAnalysis result={result} />
+
+      <PreservationConstraints constraints={result.preservationConstraints ?? []} />
 
       <RecommendationsPanel model={result.recommendedModel} aspectRatio={result.recommendedAspectRatio} />
 
