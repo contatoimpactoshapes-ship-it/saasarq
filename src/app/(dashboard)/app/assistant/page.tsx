@@ -229,11 +229,13 @@ function StudioResults({
   onRefine,
   onClear,
   spaceName,
+  imageUrl,
 }: {
   result: PromptArchitectResponse;
   onRefine: (prompt: string) => void;
   onClear: () => void;
   spaceName?: string;
+  imageUrl?: string | null;
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
@@ -248,9 +250,16 @@ function StudioResults({
 
   function deployToWorkspace() {
     const modelId = MODEL_TO_RENDER_ID[result.recommendedModel] ?? "render-nano-banana-2";
-    router.push(
-      `/app/ai-image-generator?mode=render3d&prompt=${encodeURIComponent(result.prompt)}&renderModel=${encodeURIComponent(modelId)}&aspectRatio=${encodeURIComponent(result.recommendedAspectRatio)}`
-    );
+    const params = new URLSearchParams({
+      mode:        "render3d",
+      prompt:      result.prompt,
+      renderModel: modelId,
+      aspectRatio: result.recommendedAspectRatio,
+    });
+    // Include the reference image so the render workflow pre-loads it as a source node.
+    // Only the stable R2 URL works across pages — blob: URLs are session-scoped.
+    if (imageUrl) params.set("imageUrl", imageUrl);
+    router.push(`/app/ai-image-generator?${params.toString()}`);
   }
 
   return (
@@ -482,6 +491,10 @@ export default function AssistantPage() {
   const [loading,         setLoading]         = useState(false);
   const [dragOver,        setDragOver]        = useState(false);
 
+  // R2 URL of the analysed image — set after saveAnalysis() persists it.
+  // Blob URLs cannot cross page boundaries; this is the stable public URL.
+  const [studioImageR2Url, setStudioImageR2Url] = useState<string | null>(null);
+
   // Studio state
   const [studioImage,     setStudioImage]     = useState<string | null>(null);
   const [studioImageName, setStudioImageName] = useState<string>("");
@@ -589,6 +602,8 @@ export default function AssistantPage() {
       const saved = data.analysis;
       setHistory((prev) => [saved, ...prev]);
       setActiveAnalysisId(saved.id);
+      // Capture the stable R2 URL so deployToWorkspace can pass it to the render workflow
+      if (saved.imageUrl) setStudioImageR2Url(saved.imageUrl);
       toast.success("Análise salva.", { duration: 2000 });
     } catch (e) {
       console.error("[saveAnalysis]", e);
@@ -668,6 +683,7 @@ export default function AssistantPage() {
     removePending();
     setInput("");
     setProjectDetails("");
+    setStudioImageR2Url(null);
   }
 
   // ── Restore from history ──────────────────────────────────────────────────────
@@ -676,6 +692,7 @@ export default function AssistantPage() {
     if (studioImage?.startsWith("blob:")) URL.revokeObjectURL(studioImage);
     setStudioImage(item.imageUrl);
     setStudioImageName(item.imageName ?? "");
+    setStudioImageR2Url(item.imageUrl);
     setStudioResult({
       prompt:                 item.prompt,
       imageSummary:           item.imageSummary,
@@ -982,6 +999,7 @@ export default function AssistantPage() {
                   onRefine={handleRefine}
                   onClear={handleClear}
                   spaceName={spaces.find((s) => s.id === selectedSpaceId)?.name}
+                  imageUrl={studioImageR2Url}
                 />
               ) : null}
             </main>

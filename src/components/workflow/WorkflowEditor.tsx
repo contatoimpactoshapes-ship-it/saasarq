@@ -80,13 +80,15 @@ function downloadUrl(url: string, filename = "render.png") {
 // ── Inner component ───────────────────────────────────────────────────────────
 
 function WorkflowEditorInner({
-  spaceId:       propSpaceId,
-  workflowId:    propWorkflowId,
-  initialPrompt: propInitialPrompt,
+  spaceId:          propSpaceId,
+  workflowId:       propWorkflowId,
+  initialPrompt:    propInitialPrompt,
+  initialImageUrl:  propInitialImageUrl,
 }: {
-  spaceId?:       string;
-  workflowId?:    string;
-  initialPrompt?: string;
+  spaceId?:          string;
+  workflowId?:       string;
+  initialPrompt?:    string;
+  initialImageUrl?:  string;
 }) {
   const { fitView, setViewport, getViewport, getNode } = useReactFlow();
 
@@ -119,10 +121,11 @@ function WorkflowEditorInner({
   const pollingRef       = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
 
   // ── Persistence refs ──────────────────────────────────────────────────────
-  const spaceIdRef      = useRef<string | null>(null);
-  const workflowIdRef   = useRef<string | null>(null);
-  const saveTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasRestoredRef  = useRef(false);
+  const spaceIdRef              = useRef<string | null>(null);
+  const workflowIdRef           = useRef<string | null>(null);
+  const saveTimerRef            = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasRestoredRef          = useRef(false);
+  const hasAddedInitialImageRef = useRef(false);
   const saveStateRef    = useRef<WorkflowSettings & { nodes: Node[]; edges: Edge[] }>({
     nodes: [], edges: [], globalPrompt: "", renderModel: "render-flux-dev", strength: 0.82, numOutputs: 1,
   });
@@ -329,6 +332,44 @@ function WorkflowEditorInner({
     // propSpaceId / propWorkflowId are stable props; startPoll deps are stable Zustand methods
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Inject initial image from Prompt Architect ───────────────────────────
+  // Fires once after restore completes. Adds the reference image that was
+  // analysed in Prompt Architect as a ready source node so the user can
+  // render it immediately without re-uploading.
+
+  useEffect(() => {
+    if (isRestoring || hasAddedInitialImageRef.current || !propInitialImageUrl) return;
+    hasAddedInitialImageRef.current = true;
+
+    setNodes((ns) => {
+      const sourceNodes = ns.filter((n) => {
+        const d = n.data as unknown as ImageNodeData;
+        return d.nodeKind === "source";
+      });
+      const lastY = sourceNodes.length > 0
+        ? Math.max(...sourceNodes.map((n) => n.position.y)) + NODE_STEP_Y
+        : 48;
+
+      const nodeId   = `sn-init-${Date.now()}`;
+      const initNode: Node = {
+        id:       nodeId,
+        type:     "imageNode",
+        position: { x: SOURCE_X, y: lastY },
+        data:     {
+          nodeKind:  "source",
+          status:    "ready",
+          label:     "referência arquitetônica",
+          falUrl:    propInitialImageUrl,
+          imageUrl:  propInitialImageUrl,
+          nodeId,
+        } as unknown as Record<string, unknown>,
+      };
+      return [...ns, initNode];
+    });
+    // isRestoring is the only reactive dep we need — propInitialImageUrl is a stable prop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRestoring]);
 
   // ── Node data builders ────────────────────────────────────────────────────
 
@@ -1061,14 +1102,21 @@ export function WorkflowEditor({
   spaceId,
   workflowId,
   initialPrompt,
+  initialImageUrl,
 }: {
-  spaceId?:       string;
-  workflowId?:    string;
-  initialPrompt?: string;
+  spaceId?:          string;
+  workflowId?:       string;
+  initialPrompt?:    string;
+  initialImageUrl?:  string;
 } = {}) {
   return (
     <ReactFlowProvider>
-      <WorkflowEditorInner spaceId={spaceId} workflowId={workflowId} initialPrompt={initialPrompt} />
+      <WorkflowEditorInner
+        spaceId={spaceId}
+        workflowId={workflowId}
+        initialPrompt={initialPrompt}
+        initialImageUrl={initialImageUrl}
+      />
     </ReactFlowProvider>
   );
 }

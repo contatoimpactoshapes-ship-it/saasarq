@@ -614,7 +614,10 @@ function AIImageGeneratorInner() {
 
       {/* ── 3D RENDER MODE ── */}
       {mode === "render3d" && (
-        <WorkflowEditor initialPrompt={searchParams.get("prompt") ?? undefined} />
+        <WorkflowEditor
+          initialPrompt={searchParams.get("prompt") ?? undefined}
+          initialImageUrl={searchParams.get("imageUrl") ?? undefined}
+        />
       )}
 
       {/* Hidden file input */}
