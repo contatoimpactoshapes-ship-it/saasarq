@@ -26,9 +26,13 @@ const AR_SIZE: Record<string, string | { width: number; height: number }> = {
   "1:1":  "square_hd",
   "16:9": "landscape_16_9",
   "9:16": "portrait_16_9",
-  "4:5":  { width: 820, height: 1024 },
-  "3:2":  { width: 1024, height: 682 },
-  "2:3":  { width: 682, height: 1024 },
+  "4:5":  { width: 820,  height: 1024 },
+  "5:4":  { width: 1024, height: 820  },
+  "3:2":  { width: 1024, height: 682  },
+  "2:3":  { width: 682,  height: 1024 },
+  "4:3":  { width: 1024, height: 768  },
+  "3:4":  { width: 768,  height: 1024 },
+  "21:9": { width: 1344, height: 576  },
 };
 
 // Style → base prompt mapping
