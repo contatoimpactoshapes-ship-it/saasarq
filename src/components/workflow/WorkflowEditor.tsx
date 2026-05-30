@@ -356,18 +356,16 @@ function WorkflowEditorInner({
         id:       nodeId,
         type:     "imageNode",
         position: { x: SOURCE_X, y: lastY },
-        data:     {
-          nodeKind:  "source",
-          status:    "ready",
+        data:     buildSourceData(nodeId, {
           label:     "referência arquitetônica",
           falUrl:    propInitialImageUrl,
-          imageUrl:  propInitialImageUrl,
-          nodeId,
-        } as unknown as Record<string, unknown>,
+          uploading: false,
+          prompt:    propInitialPrompt ?? "",
+        }) as unknown as Record<string, unknown>,
       };
       return [...ns, initNode];
     });
-    // isRestoring is the only reactive dep we need — propInitialImageUrl is a stable prop
+    // isRestoring is the only reactive dep we need — props are stable on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRestoring]);
 

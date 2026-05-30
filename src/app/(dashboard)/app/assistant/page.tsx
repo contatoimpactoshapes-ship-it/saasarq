@@ -590,6 +590,30 @@ export default function AssistantPage() {
     if (file) applyImage(file);
   }
 
+  // ── Upload image to FAL storage for Workflow handoff ────────────────────────
+  // Runs in parallel with the analysis. Uses /api/upload (FAL), not R2, because
+  // WorkflowEditor's render pipeline expects a FAL CDN URL as falUrl on source nodes.
+  // Manages saveImagePending so "Usar na Renderização" only unblocks when URL is ready.
+
+  async function uploadImageForWorkflow(file: File) {
+    setSaveImagePending(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      if (res.ok) {
+        const data = await res.json() as { url?: string };
+        if (data.url) setStudioImageR2Url(data.url);
+      } else {
+        console.warn("[uploadImageForWorkflow] upload falhou:", res.status);
+      }
+    } catch (e) {
+      console.error("[uploadImageForWorkflow]", e);
+    } finally {
+      setSaveImagePending(false);
+    }
+  }
+
   // ── Save analysis ─────────────────────────────────────────────────────────────
 
   async function saveAnalysis(
@@ -618,16 +642,13 @@ export default function AssistantPage() {
       const saved = data.analysis;
       setHistory((prev) => [saved, ...prev]);
       setActiveAnalysisId(saved.id);
-      if (saved.imageUrl) setStudioImageR2Url(saved.imageUrl);
+      // Fallback: if analyses API returned an imageUrl (R2) and we don't have a FAL URL yet
+      if (saved.imageUrl && !studioImageR2Url) setStudioImageR2Url(saved.imageUrl);
       toast.success("Análise salva.", { duration: 2000 });
     } catch (e) {
       console.error("[saveAnalysis]", e);
-      if (imageFile) {
-        toast.error("Erro ao salvar imagem de referência. Use 'Usar na Renderização' sem imagem ou tente novamente.", { duration: 5000 });
-      }
-    } finally {
-      setSaveImagePending(false);
     }
+    // saveImagePending is managed exclusively by uploadImageForWorkflow, not here
   }
 
   // ── Analyze ──────────────────────────────────────────────────────────────────
@@ -650,6 +671,7 @@ export default function AssistantPage() {
 
     setStudioImage(previewUrl);
     setStudioImageName(imageName);
+    setStudioImageR2Url(null);
     setPendingImage(null);
     setPendingPreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -657,6 +679,10 @@ export default function AssistantPage() {
     setLoading(true);
     setStudioResult(null);
     setActiveAnalysisId(null);
+
+    // Upload image to FAL in parallel with analysis — sets studioImageR2Url when done
+    // so deployToWorkspace always has a stable public URL for the WorkflowEditor inject.
+    if (imageFile) uploadImageForWorkflow(imageFile);
 
     try {
       const form = new FormData();
@@ -680,9 +706,7 @@ export default function AssistantPage() {
       const result = await res.json() as PromptArchitectResponse;
       setStudioResult(result);
 
-      // Lock "Usar na Renderização" until the R2 upload completes (or fails)
-      if (imageFile) setSaveImagePending(true);
-      // Fire-and-forget save — always unlocks via finally in saveAnalysis
+      // Fire-and-forget save to DB/R2 — does not manage saveImagePending
       saveAnalysis(result, imageFile, imageName).catch(console.error);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao analisar. Tente novamente.");
