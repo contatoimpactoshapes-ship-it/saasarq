@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_BYTES     = 5 * 1024 * 1024; // 5 MB
 const VISION_MODEL  = "claude-haiku-4-5-20251001";
-const MAX_TOKENS    = 1500;
+const MAX_TOKENS    = 3000;
 
 // ── JSON extraction helper ────────────────────────────────────────────────────
 
@@ -230,9 +230,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(buildFallback(message, hasImage));
     }
 
-    const apiData = await apiRes.json() as { content?: Array<{ text?: string }> };
-    const raw     = apiData.content?.[0]?.text ?? "";
-    const result  = parseStructured(raw);
+    const apiData = await apiRes.json() as {
+      content?:    Array<{ text?: string }>;
+      stop_reason?: string;
+      usage?:      { input_tokens?: number; output_tokens?: number };
+    };
+
+    const raw         = apiData.content?.[0]?.text ?? "";
+    const stopReason  = apiData.stop_reason ?? "unknown";
+    const inputTok    = apiData.usage?.input_tokens  ?? 0;
+    const outputTok   = apiData.usage?.output_tokens ?? 0;
+    const truncated   = stopReason === "max_tokens";
+
+    // [PHASE-1 VALIDATION] Remove after quality validation is complete
+    console.log(
+      `[prompt-architect] response: chars=${raw.length} est_tokens≈${Math.round(raw.length / 4)}` +
+      ` stop_reason=${stopReason} input_tokens=${inputTok} output_tokens=${outputTok}` +
+      ` truncated=${truncated} has_image=${hasImage}`
+    );
+
+    const result    = parseStructured(raw);
+    const jsonValid = result.qualityScore > 0 || result.imageSummary !== null || result.suggestions.length > 0;
+
+    // [PHASE-1 VALIDATION] Remove after quality validation is complete
+    console.log(
+      `[prompt-architect] parsed: json_valid=${jsonValid} quality_score=${result.qualityScore}` +
+      ` suggestions=${result.suggestions.length} prompt_chars=${result.prompt.length}`
+    );
+
+    if (truncated) {
+      // [PHASE-1 VALIDATION] Remove after quality validation is complete
+      console.warn(`[prompt-architect] TRUNCATED — response cut at ${MAX_TOKENS} tokens. Consider increasing MAX_TOKENS further.`);
+    }
 
     return NextResponse.json(result);
   } catch (err) {
