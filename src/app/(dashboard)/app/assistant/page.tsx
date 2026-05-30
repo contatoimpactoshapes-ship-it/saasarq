@@ -7,11 +7,13 @@ import {
   Upload, X, ImagePlus, Send, Copy, Check,
   RefreshCw, Trash2, Sparkles, Zap, Cpu,
   Maximize2, Lightbulb, ScanLine, ChevronRight,
-  Clock, FolderOpen,
+  Clock, FolderOpen, Palette, Sun, Layers,
+  Aperture, Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { TopBar } from "@/components/layout/TopBar";
 import type { PromptArchitectResponse } from "@/lib/assistant/prompt-architect";
+import { detectStyle, detectMaterials, detectLighting, detectCamera, getScoreLevel } from "@/lib/assistant/intel";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -58,9 +60,10 @@ function remapRatio(r: string): string { return RATIO_REMAP[r] ?? r; }
 // ── Score helpers ─────────────────────────────────────────────────────────────
 
 function scoreStyle(score: number) {
-  if (score >= 80) return { num: "text-emerald-600", bar: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 border border-emerald-200", label: "Excellent" };
-  if (score >= 50) return { num: "text-amber-500",   bar: "bg-amber-500",   badge: "bg-amber-50 text-amber-700 border border-amber-200",   label: "Adequate" };
-  return           { num: "text-rose-500",    bar: "bg-rose-500",    badge: "bg-rose-50 text-rose-700 border border-rose-200",     label: "Limited"  };
+  if (score >= 90) return { num: "text-emerald-600", bar: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 border border-emerald-200",  label: "Excellent" };
+  if (score >= 80) return { num: "text-indigo-600",  bar: "bg-indigo-500",  badge: "bg-indigo-50 text-indigo-700 border border-indigo-200",    label: "Strong" };
+  if (score >= 70) return { num: "text-amber-500",   bar: "bg-amber-500",   badge: "bg-amber-50 text-amber-700 border border-amber-200",       label: "Good" };
+  return           { num: "text-rose-500",    bar: "bg-rose-500",    badge: "bg-rose-50 text-rose-700 border border-rose-200",           label: "Needs Improvement" };
 }
 
 function relativeTime(iso: string): string {
@@ -106,14 +109,105 @@ function QualityScore({ score }: { score: number }) {
           transition={{ duration: 1, ease: "easeOut" }}
         />
       </div>
-      <div className="mt-3 flex gap-3 text-[10px] text-zinc-400">
-        <span>Fidelidade</span><span>·</span>
-        <span>Materiais</span><span>·</span>
-        <span>Iluminação</span><span>·</span>
-        <span>Composição</span><span>·</span>
-        <span>Realismo</span>
-      </div>
+      <p className="mt-2.5 text-[11px] text-zinc-500 leading-relaxed">{getScoreLevel(score).description}</p>
     </div>
+  );
+}
+
+function ProjectContextBadge({ spaceName }: { spaceName: string }) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-xl">
+      <Building2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+      <span className="text-[11px] font-medium text-indigo-700 flex-1 truncate">{spaceName}</span>
+      <span className="text-[9px] font-semibold uppercase tracking-wider text-indigo-400 bg-indigo-100 px-1.5 py-0.5 rounded shrink-0">
+        Context Active
+      </span>
+    </div>
+  );
+}
+
+function AnalysisCard({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white border border-zinc-200/80 rounded-xl overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-100 bg-zinc-50/80">
+        <span className="text-zinc-400">{icon}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">{title}</span>
+      </div>
+      <div className="p-3">{children}</div>
+    </div>
+  );
+}
+
+function StyleCard({ prompt }: { prompt: string }) {
+  const { label, confidence } = detectStyle(prompt);
+  return (
+    <AnalysisCard icon={<Palette className="w-3 h-3" />} title="Style">
+      <p className="text-sm font-semibold text-zinc-800 mb-2">{label}</p>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-1 bg-zinc-100 rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-indigo-500 rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: `${confidence}%` }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+          />
+        </div>
+        {confidence > 0 && (
+          <span className="text-[10px] text-zinc-400 tabular-nums shrink-0">{confidence}%</span>
+        )}
+      </div>
+    </AnalysisCard>
+  );
+}
+
+function MaterialsCard({ prompt }: { prompt: string }) {
+  const materials = detectMaterials(prompt);
+  return (
+    <AnalysisCard icon={<Layers className="w-3 h-3" />} title="Materials">
+      {materials.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {materials.map((m) => (
+            <span
+              key={m}
+              className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 border border-zinc-200"
+            >
+              {m}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-zinc-400">No specific materials detected.</p>
+      )}
+    </AnalysisCard>
+  );
+}
+
+function LightingCard({ prompt }: { prompt: string }) {
+  const lighting = detectLighting(prompt);
+  return (
+    <AnalysisCard icon={<Sun className="w-3 h-3" />} title="Lighting">
+      <p className="text-sm text-zinc-700 leading-snug">{lighting}</p>
+    </AnalysisCard>
+  );
+}
+
+function CameraCard({ prompt }: { prompt: string }) {
+  const { focalLength, height, type } = detectCamera(prompt);
+  return (
+    <AnalysisCard icon={<Aperture className="w-3 h-3" />} title="Camera">
+      <div className="space-y-1.5">
+        {[
+          { k: "Focal Length", v: focalLength },
+          { k: "View Height",  v: height },
+          { k: "Lens Type",    v: type },
+        ].map(({ k, v }) => (
+          <div key={k} className="flex items-center justify-between">
+            <span className="text-[10px] text-zinc-400">{k}</span>
+            <span className="text-[10px] font-semibold text-zinc-700 bg-zinc-100 px-2 py-0.5 rounded-md">{v}</span>
+          </div>
+        ))}
+      </div>
+    </AnalysisCard>
   );
 }
 
@@ -144,10 +238,12 @@ function StudioResults({
   result,
   onRefine,
   onClear,
+  spaceName,
 }: {
   result: PromptArchitectResponse;
   onRefine: (prompt: string) => void;
   onClear: () => void;
+  spaceName?: string;
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
@@ -175,7 +271,16 @@ function StudioResults({
       transition={{ duration: 0.35 }}
       className="p-6 space-y-4 max-w-2xl"
     >
+      {spaceName && <ProjectContextBadge spaceName={spaceName} />}
+
       <QualityScore score={result.qualityScore} />
+
+      <div className="grid grid-cols-2 gap-3">
+        <StyleCard    prompt={result.prompt} />
+        <MaterialsCard prompt={result.prompt} />
+        <LightingCard  prompt={result.prompt} />
+        <CameraCard    prompt={result.prompt} />
+      </div>
 
       {result.imageSummary && (
         <Section label="Detected Elements">
@@ -849,7 +954,12 @@ export default function AssistantPage() {
             {/* RIGHT: Analysis results */}
             <main className="flex-1 overflow-y-auto bg-zinc-50/60">
               {loading ? <AnalyzingSkeleton /> : studioResult ? (
-                <StudioResults result={studioResult} onRefine={handleRefine} onClear={handleClear} />
+                <StudioResults
+                  result={studioResult}
+                  onRefine={handleRefine}
+                  onClear={handleClear}
+                  spaceName={spaces.find((s) => s.id === selectedSpaceId)?.name}
+                />
               ) : null}
             </main>
           </motion.div>
