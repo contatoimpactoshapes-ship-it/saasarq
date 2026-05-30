@@ -599,6 +599,7 @@ export default function AssistantPage() {
       const saved = data.analysis;
       setHistory((prev) => [saved, ...prev]);
       setActiveAnalysisId(saved.id);
+      toast.success("Análise salva.", { duration: 2000 });
     } catch (e) {
       console.error("[saveAnalysis]", e);
     }
