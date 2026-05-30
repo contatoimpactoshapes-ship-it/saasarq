@@ -525,6 +525,13 @@ export default function AssistantPage() {
       if (content)   form.append("message", content);
       if (imageFile) form.append("image",   imageFile);
 
+      // Pass project context so AI can calibrate recommendations
+      if (selectedSpaceId) {
+        const selectedSpace = spaces.find((s) => s.id === selectedSpaceId);
+        form.append("spaceId",   selectedSpaceId);
+        if (selectedSpace?.name) form.append("spaceName", selectedSpace.name);
+      }
+
       const res = await fetch("/api/assistant/prompt-architect", { method: "POST", body: form });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string };

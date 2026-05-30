@@ -2,8 +2,11 @@ import { auth }        from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import {
   PROMPT_ARCHITECT_SYSTEM_PROMPT,
+  buildContextualSystemPrompt,
+  type ProjectContext,
   type PromptArchitectResponse,
 } from "@/lib/assistant/prompt-architect";
+import { prisma } from "@/lib/prisma";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_BYTES     = 5 * 1024 * 1024; // 5 MB
@@ -22,10 +25,8 @@ function parseStructured(raw: string): PromptArchitectResponse {
 
   let parsed: Record<string, unknown> | null = null;
 
-  // Try direct parse
   try { parsed = JSON.parse(text); } catch { /* fall through */ }
 
-  // Try extracting first {...} block (handles markdown fences / extra text)
   if (!parsed) {
     const match = text.match(/\{[\s\S]*\}/);
     if (match) {
@@ -50,7 +51,6 @@ function parseStructured(raw: string): PromptArchitectResponse {
     };
   }
 
-  // Last resort: treat full text as prompt
   return {
     prompt:                 text,
     imageSummary:           null,
@@ -59,6 +59,60 @@ function parseStructured(raw: string): PromptArchitectResponse {
     recommendedModel:       "Nano Banana 2",
     recommendedAspectRatio: "16:9",
   };
+}
+
+// ── Context resolver ──────────────────────────────────────────────────────────
+
+async function resolveSystemPrompt(
+  clerkId:      string,
+  spaceId:      string | null,
+  spaceName:    string | null,
+  workflowName: string | null,
+): Promise<string> {
+  if (!spaceId || !spaceName) return PROMPT_ARCHITECT_SYSTEM_PROMPT;
+
+  const dbUser = await prisma.user.findFirst({
+    where:  { clerkId },
+    select: { id: true },
+  });
+  if (!dbUser) return PROMPT_ARCHITECT_SYSTEM_PROMPT;
+
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const [historyResult, spaceResult] = await Promise.allSettled([
+    prisma.promptAnalysis.findMany({
+      where: {
+        spaceId,
+        userId:       dbUser.id,
+        qualityScore: { gt: 0 },
+        createdAt:    { gte: thirtyDaysAgo },
+      },
+      orderBy: { qualityScore: "desc" },
+      take:    5,
+      select:  { prompt: true, qualityScore: true, recommendedModel: true },
+    }),
+    prisma.space.findFirst({
+      where:  { id: spaceId, userId: dbUser.id },
+      select: { canvasData: true },
+    }),
+  ]);
+
+  const history  = historyResult.status === "fulfilled" ? historyResult.value : [];
+  const spaceRaw = spaceResult.status   === "fulfilled" ? spaceResult.value   : null;
+
+  type SpaceMeta = { briefing?: string; materials?: string[]; styleTag?: string };
+  const meta = ((spaceRaw?.canvasData ?? {}) as Record<string, unknown>).metadata as SpaceMeta | undefined;
+
+  const context: ProjectContext = {
+    spaceName:    spaceName,
+    workflowName: workflowName ?? undefined,
+    briefing:     meta?.briefing,
+    materials:    meta?.materials,
+    styleTag:     meta?.styleTag,
+    history,
+  };
+
+  return buildContextualSystemPrompt(context);
 }
 
 // ── Fallback (no API key) ─────────────────────────────────────────────────────
@@ -94,10 +148,13 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Parse FormData ──────────────────────────────────────────────────────
-    const form      = await req.formData();
-    const mode      = (form.get("mode")    as string | null) ?? "chat";
-    const message   = (form.get("message") as string | null) ?? "";
-    const imageFile = form.get("image") as File | null;
+    const form         = await req.formData();
+    const mode         = (form.get("mode")         as string | null) ?? "chat";
+    const message      = (form.get("message")      as string | null) ?? "";
+    const imageFile    = form.get("image") as File | null;
+    const spaceId      = (form.get("spaceId")      as string | null) || null;
+    const spaceName    = (form.get("spaceName")    as string | null) || null;
+    const workflowName = (form.get("workflowName") as string | null) || null;
 
     // ── Image validation ────────────────────────────────────────────────────
     if (imageFile && imageFile.size > 0) {
@@ -122,6 +179,9 @@ export async function POST(req: NextRequest) {
     if (!anthropicKey) {
       return NextResponse.json(buildFallback(message, hasImage));
     }
+
+    // ── Resolve contextual system prompt ────────────────────────────────────
+    const systemPrompt = await resolveSystemPrompt(userId, spaceId, spaceName, workflowName);
 
     // ── Build Claude message content ────────────────────────────────────────
     type ContentBlock =
@@ -155,14 +215,14 @@ export async function POST(req: NextRequest) {
     const apiRes = await fetch("https://api.anthropic.com/v1/messages", {
       method:  "POST",
       headers: {
-        "Content-Type":    "application/json",
-        "x-api-key":       anthropicKey,
+        "Content-Type":      "application/json",
+        "x-api-key":         anthropicKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
         model:      VISION_MODEL,
         max_tokens: MAX_TOKENS,
-        system:     PROMPT_ARCHITECT_SYSTEM_PROMPT,
+        system:     systemPrompt,
         messages:   [{ role: "user", content: userContent }],
       }),
     });

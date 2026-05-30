@@ -12,12 +12,14 @@ const FALLBACK_MODEL = "fal-ai/flux/dev/image-to-image";
 const CREDIT_COST = 120;
 
 const renderSchema = z.object({
-  imageUrl:     z.string().url(),
-  prompt:       z.string().max(10000).default(""),
-  style:        z.string().default("exterior-day"),
-  strength:     z.number().min(0.1).max(0.99).default(0.85),
-  renderModel:  z.string().default("render-flux-dev"),
-  aspectRatio:  z.string().default("1:1"),
+  imageUrl:    z.string().url(),
+  prompt:      z.string().max(10000).default(""),
+  style:       z.string().default("exterior-day"),
+  strength:    z.number().min(0.1).max(0.99).default(0.85),
+  renderModel: z.string().default("render-flux-dev"),
+  aspectRatio: z.string().default("1:1"),
+  spaceId:     z.string().optional(),
+  workflowId:  z.string().optional(),
 });
 
 const AR_SIZE: Record<string, string | { width: number; height: number }> = {
@@ -69,7 +71,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { imageUrl, prompt, style, strength, renderModel, aspectRatio } = parsed.data;
+    const { imageUrl, prompt, style, strength, renderModel, aspectRatio, spaceId, workflowId } = parsed.data;
 
     const clerkUser = await currentUser();
     const email = clerkUser?.emailAddresses[0]?.emailAddress ?? "";
@@ -172,7 +174,14 @@ export async function POST(req: NextRequest) {
         tool:        "IMAGE_EDIT",
         model:       renderModel,
         prompt:      finalPrompt,
-        parameters:  { sourceUrl: imageUrl, style, strength, aspectRatio },
+        parameters:  {
+          sourceUrl: imageUrl,
+          style,
+          strength,
+          aspectRatio,
+          ...(spaceId    && { spaceId }),
+          ...(workflowId && { workflowId }),
+        },
         status:      "PENDING",
         outputUrls:  [],
         creditsCost: CREDIT_COST,

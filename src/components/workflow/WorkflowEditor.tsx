@@ -420,6 +420,8 @@ function WorkflowEditorInner({
             strength:    effectiveStren,
             renderModel: effectiveModel,
             aspectRatio: effectiveAspect,
+            ...(propSpaceId    && { spaceId:    propSpaceId }),
+            ...(propWorkflowId && { workflowId: propWorkflowId }),
           }),
         });
         const result = await res.json();
@@ -447,7 +449,7 @@ function WorkflowEditorInner({
     }
   }, [nodes, edges, numOutputs, credits, globalPrompt, renderModel, strength,
       decrementCredits, addGeneration, updateGeneration, refreshCredits,
-      startPoll, setNodes, setEdges, getNode]);
+      startPoll, setNodes, setEdges, getNode, propSpaceId, propWorkflowId]);
 
   // ── Render all ────────────────────────────────────────────────────────────
 

@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Loader2,
-  Check, X, Layout, ExternalLink,
+  Check, X, Layout, ExternalLink, Sparkles,
 } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { toast } from "sonner";
@@ -192,6 +192,13 @@ export default function SpaceDetailPage() {
   const [deleteWfId,   setDeleteWfId]   = useState<string | null>(null);
   const [deleting,     setDeleting]     = useState(false);
 
+  // AI Context metadata (stored in canvasData.metadata, no migration)
+  const [metaBriefing,   setMetaBriefing]   = useState("");
+  const [metaMaterials,  setMetaMaterials]  = useState("");
+  const [metaStyleTag,   setMetaStyleTag]   = useState("");
+  const [metaDirty,      setMetaDirty]      = useState(false);
+  const [savingMeta,     setSavingMeta]     = useState(false);
+
   // ── Data helpers ────────────────────────────────────────────────────────────
 
   function sortedWorkflows(map: Record<string, WorkflowMeta>): WorkflowMeta[] {
@@ -228,6 +235,14 @@ export default function SpaceDetailPage() {
       setSpace(data);
       setSpaceName(data.name);
       setWorkflows(sortedWorkflows(getWorkflows(data.canvasData)));
+
+      // Populate AI context metadata
+      type Meta = { briefing?: string; materials?: string[]; styleTag?: string };
+      const meta = ((data.canvasData ?? {}) as { metadata?: Meta }).metadata ?? {};
+      setMetaBriefing(meta.briefing ?? "");
+      setMetaMaterials((meta.materials ?? []).join(", "));
+      setMetaStyleTag(meta.styleTag ?? "");
+      setMetaDirty(false);
     } catch {
       toast.error("Erro ao carregar Space");
     } finally {
@@ -316,6 +331,39 @@ export default function SpaceDetailPage() {
 
   function handleOpenWorkflow(wfId: string) {
     router.push(`/app/spaces/${spaceId}/canvas/${wfId}`);
+  }
+
+  // ── AI Context metadata ──────────────────────────────────────────────────────
+
+  async function handleSaveMeta() {
+    setSavingMeta(true);
+    try {
+      const materials = metaMaterials
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      await fetch(`/api/spaces/${spaceId}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          canvasData: {
+            metadata: {
+              ...(metaBriefing.trim()  && { briefing:   metaBriefing.trim() }),
+              ...(materials.length     && { materials }),
+              ...(metaStyleTag.trim()  && { styleTag:   metaStyleTag.trim() }),
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        }),
+      });
+      setMetaDirty(false);
+      toast.success("Contexto IA salvo.");
+    } catch {
+      toast.error("Erro ao salvar contexto IA.");
+    } finally {
+      setSavingMeta(false);
+    }
   }
 
   // ── Render states ────────────────────────────────────────────────────────────
@@ -456,6 +504,74 @@ export default function SpaceDetailPage() {
             </button>
           </div>
         )}
+      </div>
+
+      {/* AI Context section */}
+      <div className="border border-[var(--border-default)] rounded-2xl overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-3 bg-[var(--bg-secondary)] border-b border-[var(--border-default)]">
+          <Sparkles className="w-4 h-4 text-[var(--color-brand)]" />
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">Contexto IA</h2>
+          <span className="text-xs text-[var(--text-muted)]">— calibra o Prompt Architect para este projeto</span>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-primary)] mb-1.5">
+              Briefing do Projeto
+            </label>
+            <textarea
+              value={metaBriefing}
+              onChange={(e) => { setMetaBriefing(e.target.value); setMetaDirty(true); }}
+              placeholder="Ex: Residência contemporânea para família jovem, paleta neutra, orçamento premium, área de 420m²..."
+              rows={3}
+              className="w-full border border-[var(--border-default)] rounded-xl px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-primary)] mb-1.5">
+              Materiais Recorrentes
+            </label>
+            <input
+              type="text"
+              value={metaMaterials}
+              onChange={(e) => { setMetaMaterials(e.target.value); setMetaDirty(true); }}
+              placeholder="Ex: concreto aparente, madeira carvalho, porcelanato large-format, vidro"
+              className="w-full border border-[var(--border-default)] rounded-xl px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+            />
+            <p className="mt-1 text-[10px] text-[var(--text-muted)]">Separar por vírgula. Usado pela IA para calibrar materialidade.</p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-primary)] mb-1.5">
+              Estilo Predominante
+            </label>
+            <select
+              value={metaStyleTag}
+              onChange={(e) => { setMetaStyleTag(e.target.value); setMetaDirty(true); }}
+              className="w-full border border-[var(--border-default)] rounded-xl px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] bg-white"
+            >
+              <option value="">Não especificado</option>
+              <option value="contemporary-minimalist">Contemporâneo Minimalista</option>
+              <option value="contemporary-warm">Contemporâneo Quente</option>
+              <option value="industrial">Industrial</option>
+              <option value="neoclassical">Neoclássico</option>
+              <option value="tropical-modern">Moderno Tropical</option>
+              <option value="scandinavian">Escandinavo</option>
+              <option value="rustic-modern">Rústico Moderno</option>
+              <option value="luxury-eclectic">Luxo Eclético</option>
+            </select>
+          </div>
+          {metaDirty && (
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={handleSaveMeta}
+                disabled={savingMeta}
+                className="h-9 px-5 flex items-center gap-2 rounded-xl brand-gradient text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                {savingMeta && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Salvar contexto
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Create workflow modal */}

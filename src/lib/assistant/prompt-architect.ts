@@ -385,3 +385,53 @@ export interface PromptArchitectResponse {
   recommendedModel:       string;
   recommendedAspectRatio: string;
 }
+
+export interface ProjectContext {
+  spaceName?:    string;
+  workflowName?: string;
+  briefing?:     string;
+  materials?:    string[];
+  styleTag?:     string;
+  history?: Array<{
+    prompt:           string;
+    qualityScore:     number;
+    recommendedModel: string;
+  }>;
+}
+
+// ── Context-aware system prompt ───────────────────────────────────────────────
+
+export function buildContextualSystemPrompt(context: ProjectContext): string {
+  const lines: string[] = [];
+
+  if (context.spaceName?.trim())     lines.push(`Projeto: "${context.spaceName.trim()}"`);
+  if (context.workflowName?.trim())  lines.push(`Ambiente: "${context.workflowName.trim()}"`);
+  if (context.briefing?.trim())      lines.push(`Briefing: "${context.briefing.trim()}"`);
+  if (context.materials?.length)     lines.push(`Materiais recorrentes: ${context.materials.join(", ")}`);
+  if (context.styleTag?.trim())      lines.push(`Estilo: ${context.styleTag.trim()}`);
+
+  const historyLines = (context.history ?? [])
+    .slice(0, 5)
+    .map((h) => {
+      const preview = h.prompt.slice(0, 180);
+      return `• [score ${h.qualityScore}] "${preview}${h.prompt.length > 180 ? "…" : ""}"`;
+    });
+
+  if (!lines.length && !historyLines.length) return PROMPT_ARCHITECT_SYSTEM_PROMPT;
+
+  const contextBlock = [
+    "",
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    "CONTEXTO DO PROJETO ATUAL",
+    "",
+    ...lines,
+    ...(historyLines.length
+      ? ["", "Análises anteriores bem-sucedidas neste projeto:", ...historyLines]
+      : []),
+    "",
+    "Use este contexto para calibrar o estilo, materialidade e modelo recomendado.",
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+  ].join("\n");
+
+  return PROMPT_ARCHITECT_SYSTEM_PROMPT + contextBlock;
+}
