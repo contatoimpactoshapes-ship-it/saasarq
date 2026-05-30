@@ -396,6 +396,78 @@ Selecionar automaticamente baseado na composição identificada:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+ANÁLISE ESTRUTURADA OBRIGATÓRIA
+
+Antes de compor o prompt final, produza análise técnica detalhada em cada campo abaixo.
+Baseie-se exclusivamente no que é visível na imagem.
+Seja objetivo, preciso e técnico. Mínimo de 2-3 linhas por campo.
+
+layoutAnalysis
+
+Descrever:
+* tipo de ambiente (sala, cozinha, fachada, escritório, etc.)
+* setorização e integração dos ambientes adjacentes
+* circulação e fluxo percebido na cena
+* pé-direito aparente (alto, médio, baixo)
+* orientação e relação com o exterior
+* aberturas presentes: janelas, portas, vãos, cobogós
+
+materialAnalysis
+
+Identificar cada material com propriedades físicas reais:
+* piso: nome, acabamento, paginação, reflexo, junta
+* paredes: cor, textura, revestimento, modulação
+* forro: material, acabamento, modulação
+* marcenaria: madeira/MDF, cor, acabamento, ferragens visíveis
+* pedra: tipo (mármore, quartzito, granito, travertino), veio, acabamento
+* metal: tipo, acabamento (fosco, polido, escovado), reflexo
+* vidro: transparência, reflexo, espessura aparente
+* tecido: trama percebida, cor, comportamento físico
+
+lightingAnalysis
+
+Identificar:
+* tipo: natural, artificial ou mista
+* origens visíveis: janelas, luminárias pendentes, embutidos, fitas LED, indireto
+* direção dominante: lateral, zenital, frontal, contra-luz
+* temperatura estimada: quente (2700-3000K) / neutro (4000K) / fria (5500-6500K)
+* intensidade: baixa / média / alta / dramática
+* qualidade: difusa / direcional / pontual / volumétrica
+* tipo de sombras: suaves ou duras
+
+cameraAnalysis
+
+Estimar:
+* distância focal aproximada (16mm / 24mm / 35mm / 50mm / 85mm)
+* altura da câmera: solo / joelho / cintura / olho / ombro / aéreo
+* tipo de perspectiva: 1 ponto / 2 pontos / perspectiva plana
+* enquadramento: horizontal / vertical / quadrado
+* relação foreground / midground / background
+* profundidade de campo percebida
+
+furnitureAnalysis
+
+Identificar cada peça:
+* nome (sofá, mesa de jantar, poltrona, banco, estante, etc.)
+* posicionamento relativo no espaço (centro, lateral, fundo, frente)
+* dimensões e proporções aparentes
+* material e acabamento percebido
+* estilo e referência estética
+* composição geral e hierarquia visual
+
+architecturalElements
+
+Identificar:
+* esquadrias: tipo (pivô, deslizante, basculante, fixa), material, dimensão percebida
+* painéis: revestimento, modulação, altura, direção
+* marcenaria fixa: armários, bancadas, nichos, embutidos, ilhas
+* elementos estruturais visíveis: pilares, vigas, lajes aparentes
+* vegetação: espécies identificáveis, posicionamento, escala
+* decoração fixa: objetos de arte, quadros, tapetes, luminárias decorativas
+* detalhes: rodapés, frisos, trilhos, puxadores, rodameios
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 IDIOMA OBRIGATÓRIO: PT-BR
 
 Todos os campos do JSON devem ser escritos em português brasileiro.
@@ -409,7 +481,13 @@ Responda EXCLUSIVAMENTE com JSON válido.
 Sem texto antes ou depois. Sem markdown. Sem blocos de código.
 
 {
-  "imageSummary": "descrição em português do que foi identificado na imagem (null se sem imagem)",
+  "imageSummary": "síntese geral da cena em 1-2 frases (null se sem imagem)",
+  "layoutAnalysis": "análise completa do layout espacial em português",
+  "materialAnalysis": "análise completa dos materiais identificados em português",
+  "lightingAnalysis": "análise completa da iluminação em português",
+  "cameraAnalysis": "análise completa da câmera e composição em português",
+  "furnitureAnalysis": "análise completa do mobiliário em português",
+  "architecturalElements": "análise completa dos elementos arquitetônicos em português",
   "qualityScore": 82,
   "recommendedModel": "Nano Banana Pro",
   "recommendedAspectRatio": "16:9",
@@ -418,7 +496,7 @@ Sem texto antes ou depois. Sem markdown. Sem blocos de código.
     "sugestão de refinamento em português 2",
     "sugestão de refinamento em português 3"
   ],
-  "prompt": "prompt completo em português brasileiro, fotográfico, hiper-realista, pronto para uso imediato"
+  "prompt": "prompt fotográfico completo em português brasileiro, sintetizando todas as análises acima em uma descrição hiper-realista que preserva integralmente a cena original — layout, materiais, iluminação, câmera, mobiliário e elementos arquitetônicos"
 }
 
 RESTRIÇÕES FINAIS
@@ -439,13 +517,20 @@ Apenas conversão para fotografia arquitetônica hiper-realista.`;
 export type PromptArchitectMode = "image_to_prompt" | "chat";
 
 export interface PromptArchitectResponse {
-  prompt:                 string;
-  imageSummary:           string | null;
-  qualityScore:           number;
-  suggestions:            string[];
-  recommendedModel:       string;
-  recommendedAspectRatio: string;
-  analysisMode?:          "fallback" | "anthropic";
+  prompt:                  string;
+  imageSummary:            string | null;
+  qualityScore:            number;
+  suggestions:             string[];
+  recommendedModel:        string;
+  recommendedAspectRatio:  string;
+  analysisMode?:           "fallback" | "anthropic";
+  // Structured architectural analysis — v2 fields (optional: absent on fallback & history restore)
+  layoutAnalysis?:         string | null;
+  materialAnalysis?:       string | null;
+  lightingAnalysis?:       string | null;
+  cameraAnalysis?:         string | null;
+  furnitureAnalysis?:      string | null;
+  architecturalElements?:  string | null;
 }
 
 export interface ProjectContext {

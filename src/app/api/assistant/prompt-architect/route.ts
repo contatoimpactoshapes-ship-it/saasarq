@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_BYTES     = 5 * 1024 * 1024; // 5 MB
 const VISION_MODEL  = "claude-haiku-4-5-20251001";
-const MAX_TOKENS    = 3000;
+const MAX_TOKENS    = 4096;
 
 // ── JSON extraction helper ────────────────────────────────────────────────────
 
@@ -35,9 +35,10 @@ function parseStructured(raw: string): PromptArchitectResponse {
   }
 
   if (parsed && typeof parsed === "object") {
+    const str = (k: string) => typeof parsed[k] === "string" ? parsed[k] as string : null;
     return {
       prompt:                 typeof parsed.prompt === "string" ? parsed.prompt : text,
-      imageSummary:           typeof parsed.imageSummary === "string" ? parsed.imageSummary : null,
+      imageSummary:           str("imageSummary"),
       qualityScore:           clamp(parsed.qualityScore),
       suggestions:            Array.isArray(parsed.suggestions)
                                 ? (parsed.suggestions as unknown[]).filter((s): s is string => typeof s === "string")
@@ -48,6 +49,13 @@ function parseStructured(raw: string): PromptArchitectResponse {
       recommendedAspectRatio: typeof parsed.recommendedAspectRatio === "string"
                                 ? parsed.recommendedAspectRatio
                                 : "16:9",
+      // v2 structured fields
+      layoutAnalysis:         str("layoutAnalysis"),
+      materialAnalysis:       str("materialAnalysis"),
+      lightingAnalysis:       str("lightingAnalysis"),
+      cameraAnalysis:         str("cameraAnalysis"),
+      furnitureAnalysis:      str("furnitureAnalysis"),
+      architecturalElements:  str("architecturalElements"),
     };
   }
 

@@ -8,7 +8,7 @@ import {
   RefreshCw, Trash2, Zap, Cpu, Loader2,
   Maximize2, Lightbulb, ScanLine, ChevronRight,
   Clock, FolderOpen, Palette, Sun, Layers,
-  Aperture, Building2,
+  Aperture, Building2, LayoutGrid, Armchair,
 } from "lucide-react";
 import { toast } from "sonner";
 import { TopBar } from "@/components/layout/TopBar";
@@ -224,6 +224,48 @@ function RecommendationsPanel({ model, aspectRatio }: { model: string; aspectRat
   );
 }
 
+// ── Architectural analysis panel ──────────────────────────────────────────────
+
+const ANALYSIS_FIELDS: Array<{
+  key: keyof PromptArchitectResponse;
+  label: string;
+  icon: React.ReactNode;
+}> = [
+  { key: "layoutAnalysis",        label: "Layout Espacial",         icon: <LayoutGrid className="w-3 h-3" /> },
+  { key: "materialAnalysis",      label: "Materialidade",           icon: <Layers className="w-3 h-3" /> },
+  { key: "lightingAnalysis",      label: "Iluminação",              icon: <Sun className="w-3 h-3" /> },
+  { key: "cameraAnalysis",        label: "Câmera & Composição",     icon: <Aperture className="w-3 h-3" /> },
+  { key: "furnitureAnalysis",     label: "Mobiliário",              icon: <Armchair className="w-3 h-3" /> },
+  { key: "architecturalElements", label: "Elementos Arquitetônicos", icon: <Building2 className="w-3 h-3" /> },
+];
+
+function ArchitecturalAnalysis({ result }: { result: PromptArchitectResponse }) {
+  const populated = ANALYSIS_FIELDS.filter((f) => {
+    const v = result[f.key];
+    return typeof v === "string" && v.trim().length > 0;
+  });
+  if (!populated.length) return null;
+
+  return (
+    <div className="bg-white border border-zinc-200/80 rounded-xl overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-zinc-100 bg-zinc-50/80">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Análise Arquitetônica</span>
+      </div>
+      <div className="divide-y divide-zinc-100">
+        {populated.map(({ key, label, icon }) => (
+          <div key={key} className="px-4 py-3">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <span className="text-zinc-400">{icon}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">{label}</span>
+            </div>
+            <p className="text-xs text-zinc-600 leading-relaxed">{result[key] as string}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function StudioResults({
   result,
   onRefine,
@@ -283,19 +325,12 @@ function StudioResults({
       </div>
 
       {result.imageSummary && (
-        <Section label="Detected Elements">
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {["Ambiente", "Materiais", "Iluminação"].map((tag) => (
-                <span key={tag} className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">
-                  <ScanLine className="w-2.5 h-2.5" />{tag}
-                </span>
-              ))}
-            </div>
-            <p className="text-sm text-zinc-600 leading-relaxed">{result.imageSummary}</p>
-          </div>
+        <Section label="Visão Geral da Cena">
+          <p className="text-sm text-zinc-600 leading-relaxed">{result.imageSummary}</p>
         </Section>
       )}
+
+      <ArchitecturalAnalysis result={result} />
 
       <RecommendationsPanel model={result.recommendedModel} aspectRatio={result.recommendedAspectRatio} />
 
