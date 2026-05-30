@@ -60,6 +60,15 @@ function parseStructured(raw: string): PromptArchitectResponse {
       preservationConstraints: Array.isArray(parsed.preservationConstraints)
         ? (parsed.preservationConstraints as unknown[]).filter((s): s is string => typeof s === "string")
         : [],
+      // v3.1 hierarchy layer
+      primaryArchitecturalElement:    str("primaryArchitecturalElement"),
+      secondaryArchitecturalElements: Array.isArray(parsed.secondaryArchitecturalElements)
+        ? (parsed.secondaryArchitecturalElements as unknown[]).filter((s): s is string => typeof s === "string")
+        : [],
+      criticalElements: Array.isArray(parsed.criticalElements)
+        ? (parsed.criticalElements as unknown[]).filter((s): s is string => typeof s === "string")
+        : [],
+      visualFocalPoint: str("visualFocalPoint"),
     };
   }
 

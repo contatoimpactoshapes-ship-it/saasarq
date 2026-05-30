@@ -466,6 +466,41 @@ Identificar:
 * decoração fixa: objetos de arte, quadros, tapetes, luminárias decorativas
 * detalhes: rodapés, frisos, trilhos, puxadores, rodameios
 
+HIERARQUIA ARQUITETÔNICA
+
+Após identificar todos os elementos, estabeleça a hierarquia visual e arquitetônica da cena.
+
+primaryArchitecturalElement
+
+O elemento arquitetônico singular mais importante que define e domina o espaço.
+Um único elemento que, se removido ou alterado, destruiria a identidade do espaço.
+Exemplos: "Ilha central em quartzito Taj Mahal", "Escada helicoidal em madeira e aço escovado", "Fachada em vidro piso-teto com vista para jardim", "Painel ripado em carvalho natural 4m de altura".
+Retornar: string — descrição específica, não genérica.
+
+secondaryArchitecturalElements
+
+Elementos de apoio que complementam e reforçam o elemento principal.
+Ordenados por importância visual decrescente.
+Máximo 5 itens.
+Retornar: string[].
+
+criticalElements
+
+Elementos que possuem prioridade máxima de preservação — não podem ser alterados, movidos ou reinterpretados sob hipótese alguma.
+Sempre incluir primaryArchitecturalElement e visualFocalPoint.
+Máximo 6 itens. Lista sucinta.
+Retornar: string[].
+
+visualFocalPoint
+
+O ponto exato para onde o olhar humano é direcionado primeiro ao ver a cena.
+Pode coincidir ou não com o primaryArchitecturalElement.
+Seja específico: não "luminária" mas "pendente escultórico em latão envelhecido posicionado acima da ilha".
+Exemplos: "Pendente escultórico dourado sobre a ilha central", "Lareira embutida revestida em pedra corten", "Escada helicoidal iluminada pela clarabóia zenital".
+Retornar: string.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 preservationConstraints
 
 Baseando-se em TUDO que foi analisado acima, listar as restrições absolutas.
@@ -505,6 +540,18 @@ Sem texto antes ou depois. Sem markdown. Sem blocos de código.
   "cameraAnalysis": "análise completa da câmera e composição em português",
   "furnitureAnalysis": "análise completa do mobiliário em português",
   "architecturalElements": "análise completa dos elementos arquitetônicos em português",
+  "primaryArchitecturalElement": "elemento arquitetônico principal específico identificado",
+  "secondaryArchitecturalElements": [
+    "elemento secundário 1",
+    "elemento secundário 2",
+    "elemento secundário 3"
+  ],
+  "criticalElements": [
+    "elemento crítico 1 (incluir primaryArchitecturalElement)",
+    "elemento crítico 2 (incluir visualFocalPoint)",
+    "elemento crítico 3"
+  ],
+  "visualFocalPoint": "ponto focal visual específico com descrição detalhada",
   "preservationConstraints": [
     "Preservar exatamente o layout: [descrever integração espacial específica]",
     "Manter a volumetria e pé-direito originais",
@@ -522,7 +569,7 @@ Sem texto antes ou depois. Sem markdown. Sem blocos de código.
     "sugestão de refinamento em português 2",
     "sugestão de refinamento em português 3"
   ],
-  "prompt": "PRESERVAR OBRIGATORIAMENTE:\n• [item 1 de preservationConstraints]\n• [item 2 de preservationConstraints]\n• [todos os demais itens]\n\nPROIBIDO:\n• Reinventar o ambiente\n• Alterar distribuição espacial\n• Mudar arquitetura existente\n• Mover mobiliário\n• Alterar orientação ou enquadramento da câmera\n\n[Descrição fotográfica hiper-realista completa sintetizando layoutAnalysis, materialAnalysis, lightingAnalysis, cameraAnalysis, furnitureAnalysis e architecturalElements — fotografia editorial profissional, anti-CGI, zero alucinação]"
+  "prompt": "ELEMENTO PRINCIPAL: [primaryArchitecturalElement]\nPONTO FOCAL: [visualFocalPoint]\n\nELEMENTOS CRÍTICOS — PRIORIDADE MÁXIMA:\n• [criticalElements[0]]\n• [criticalElements[1]]\n• [demais criticalElements]\n\nPRESERVAR OBRIGATORIAMENTE:\n• [preservationConstraints completos]\n\nPROIBIDO:\n• Reinventar o ambiente\n• Alterar distribuição espacial\n• Mudar arquitetura existente\n• Mover mobiliário ou elementos críticos\n• Alterar enquadramento ou perspectiva da câmera\n\n[Descrição fotográfica hiper-realista completa sintetizando layoutAnalysis, materialAnalysis, lightingAnalysis, cameraAnalysis, furnitureAnalysis e architecturalElements — fotografia editorial profissional, anti-CGI, zero alucinação arquitetônica]"
 }
 
 RESTRIÇÕES FINAIS
@@ -559,6 +606,11 @@ export interface PromptArchitectResponse {
   architecturalElements?:   string | null;
   // Preservation layer — v3 (list of hard constraints embedded in the prompt)
   preservationConstraints?: string[];
+  // Hierarchy layer — v3.1 (architectural importance ordering)
+  primaryArchitecturalElement?:   string | null;
+  secondaryArchitecturalElements?: string[];
+  criticalElements?:               string[];
+  visualFocalPoint?:               string | null;
 }
 
 export interface ProjectContext {

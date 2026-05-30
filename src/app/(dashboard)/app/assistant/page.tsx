@@ -9,6 +9,7 @@ import {
   Maximize2, Lightbulb, ScanLine, ChevronRight,
   Clock, FolderOpen, Palette, Sun, Layers,
   Aperture, Building2, LayoutGrid, Armchair, Shield,
+  Star, Eye, Lock, Crown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { TopBar } from "@/components/layout/TopBar";
@@ -266,6 +267,75 @@ function ArchitecturalAnalysis({ result }: { result: PromptArchitectResponse }) 
   );
 }
 
+// ── Hierarchy panel ───────────────────────────────────────────────────────────
+
+function HierarchyPanel({ result }: { result: PromptArchitectResponse }) {
+  const has =
+    result.primaryArchitecturalElement ||
+    result.visualFocalPoint ||
+    (result.secondaryArchitecturalElements?.length ?? 0) > 0 ||
+    (result.criticalElements?.length ?? 0) > 0;
+  if (!has) return null;
+
+  return (
+    <div className="bg-white border border-zinc-200/80 rounded-xl overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-zinc-100 bg-zinc-50/80">
+        <Crown className="w-3 h-3 text-zinc-400 shrink-0" />
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">Hierarquia Arquitetônica</span>
+      </div>
+      <div className="p-4 space-y-4">
+
+        {result.primaryArchitecturalElement && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2">Elemento Principal</p>
+            <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-zinc-900 rounded-xl">
+              <Star className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="text-sm font-semibold text-white leading-snug">{result.primaryArchitecturalElement}</span>
+            </div>
+          </div>
+        )}
+
+        {result.visualFocalPoint && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2">Ponto Focal Visual</p>
+            <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-indigo-50 border border-indigo-100 rounded-xl">
+              <Eye className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <span className="text-xs font-medium text-indigo-800 leading-snug">{result.visualFocalPoint}</span>
+            </div>
+          </div>
+        )}
+
+        {(result.secondaryArchitecturalElements?.length ?? 0) > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2">Elementos Secundários</p>
+            <div className="flex flex-wrap gap-1.5">
+              {result.secondaryArchitecturalElements!.map((el, i) => (
+                <span key={i} className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200">
+                  {el}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {(result.criticalElements?.length ?? 0) > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2">Elementos Críticos</p>
+            <div className="flex flex-wrap gap-1.5">
+              {result.criticalElements!.map((el, i) => (
+                <span key={i} className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-100">
+                  <Lock className="w-2.5 h-2.5 shrink-0" />{el}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
 // ── Preservation constraints panel ────────────────────────────────────────────
 
 function PreservationConstraints({ constraints }: { constraints: string[] }) {
@@ -338,6 +408,8 @@ function StudioResults({
       {spaceName && <ProjectContextBadge spaceName={spaceName} />}
 
       <QualityScore score={result.qualityScore} />
+
+      <HierarchyPanel result={result} />
 
       <div className="grid grid-cols-2 gap-3">
         <StyleCard    prompt={result.prompt} />
