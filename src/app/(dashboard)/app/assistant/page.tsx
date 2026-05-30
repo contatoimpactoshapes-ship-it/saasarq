@@ -416,9 +416,12 @@ function HistoryItem({
 }) {
   const s = scoreStyle(item.qualityScore);
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className={`group w-full text-left rounded-lg px-2.5 py-2 transition-all hover:bg-zinc-100 ${active ? "bg-zinc-100 ring-1 ring-zinc-300" : ""}`}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+      className={`group w-full text-left rounded-lg px-2.5 py-2 cursor-pointer transition-all hover:bg-zinc-100 ${active ? "bg-zinc-100 ring-1 ring-zinc-300" : ""}`}
     >
       <div className="flex items-start gap-2">
         {item.imageUrl ? (
@@ -453,7 +456,7 @@ function HistoryItem({
           <X className="w-3 h-3" />
         </button>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -500,7 +503,10 @@ export default function AssistantPage() {
 
   // R2 URL of the analysed image — set after saveAnalysis() persists it.
   // Blob URLs cannot cross page boundaries; this is the stable public URL.
-  const [studioImageR2Url, setStudioImageR2Url] = useState<string | null>(null);
+  const [studioImageR2Url,  setStudioImageR2Url]  = useState<string | null>(null);
+  // True while saveAnalysis is in-flight with an image upload. Blocks "Usar na Renderização"
+  // so imageUrl is always available in URLSearchParams when the user navigates to the workflow.
+  const [saveImagePending,  setSaveImagePending]  = useState(false);
 
   // Studio state
   const [studioImage,     setStudioImage]     = useState<string | null>(null);
@@ -604,16 +610,23 @@ export default function AssistantPage() {
       if (imageName)           form.append("imageName",    imageName);
 
       const res = await fetch("/api/assistant/analyses", { method: "POST", body: form });
-      if (!res.ok) return;
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
       const data = await res.json() as { analysis: AnalysisItem };
       const saved = data.analysis;
       setHistory((prev) => [saved, ...prev]);
       setActiveAnalysisId(saved.id);
-      // Capture the stable R2 URL so deployToWorkspace can pass it to the render workflow
       if (saved.imageUrl) setStudioImageR2Url(saved.imageUrl);
       toast.success("Análise salva.", { duration: 2000 });
     } catch (e) {
       console.error("[saveAnalysis]", e);
+      if (imageFile) {
+        toast.error("Erro ao salvar imagem de referência. Use 'Usar na Renderização' sem imagem ou tente novamente.", { duration: 5000 });
+      }
+    } finally {
+      setSaveImagePending(false);
     }
   }
 
@@ -667,7 +680,9 @@ export default function AssistantPage() {
       const result = await res.json() as PromptArchitectResponse;
       setStudioResult(result);
 
-      // Fire-and-forget save (does not block UI)
+      // Lock "Usar na Renderização" until the R2 upload completes (or fails)
+      if (imageFile) setSaveImagePending(true);
+      // Fire-and-forget save — always unlocks via finally in saveAnalysis
       saveAnalysis(result, imageFile, imageName).catch(console.error);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao analisar. Tente novamente.");
@@ -691,6 +706,7 @@ export default function AssistantPage() {
     setInput("");
     setProjectDetails("");
     setStudioImageR2Url(null);
+    setSaveImagePending(false);
   }
 
   // ── Restore from history ──────────────────────────────────────────────────────
@@ -700,6 +716,7 @@ export default function AssistantPage() {
     setStudioImage(item.imageUrl);
     setStudioImageName(item.imageName ?? "");
     setStudioImageR2Url(item.imageUrl);
+    setSaveImagePending(false);
     setStudioResult({
       prompt:                 item.prompt,
       imageSummary:           item.imageSummary,
@@ -1007,7 +1024,7 @@ export default function AssistantPage() {
                   onClear={handleClear}
                   spaceName={spaces.find((s) => s.id === selectedSpaceId)?.name}
                   imageUrl={studioImageR2Url}
-                  imageUrlPending={studioImage !== null && studioImageR2Url === null}
+                  imageUrlPending={saveImagePending}
                 />
               ) : null}
             </main>
