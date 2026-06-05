@@ -520,8 +520,10 @@ function WorkflowEditorInner({
         const r = await convertFileForUpload(f);
         if (r.message) toast.info(r.message);
         fileArray.push(r.file);
-      } catch {
-        toast.error(`${f.name}: falha na conversão — verifique o arquivo.`);
+      } catch (convErr) {
+        const raw = convErr instanceof Error ? convErr.message : String(convErr);
+        console.error("[WorkflowEditor] conversão falhou:", f.name, convErr);
+        toast.error(`${f.name}: ${raw}`, { duration: 8000 });
       }
     }
     if (!fileArray.length) return;
@@ -546,19 +548,22 @@ function WorkflowEditorInner({
       }));
 
       (async () => {
+        console.log(`[WorkflowEditor] upload (replace) iniciando: "${file.name}" (${(file.size / 1024).toFixed(1)} KB)`);
         try {
           const fd = new FormData();
           fd.append("file", file);
           const res  = await fetch("/api/upload", { method: "POST", body: fd });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error);
+          const data = await res.json().catch(() => ({}) as Record<string, unknown>);
+          if (!res.ok) throw new Error((data as { error?: string }).error ?? `HTTP ${res.status}`);
+          console.log("[WorkflowEditor] upload (replace) concluído:", (data as { url?: string }).url?.slice(0, 60));
           setNodes((ns) => ns.map((n) => {
             if (n.id !== replaceId) return n;
             const d = n.data as unknown as ImageNodeData;
-            return { ...n, data: { ...d, falUrl: data.url, uploading: false, status: "ready" as NodeStatus } };
+            return { ...n, data: { ...d, falUrl: (data as { url: string }).url, uploading: false, status: "ready" as NodeStatus } };
           }));
         } catch (err) {
           const errorMessage = sanitizeError(err);
+          console.error("[WorkflowEditor] upload (replace) falhou:", err);
           setNodes((ns) => ns.map((n) => {
             if (n.id !== replaceId) return n;
             const d = n.data as unknown as ImageNodeData;
@@ -597,21 +602,23 @@ function WorkflowEditorInner({
       setNodes((ns) => [...ns, newNode]);
 
       (async () => {
+        console.log(`[WorkflowEditor] upload (add) iniciando: "${file.name}" (${(file.size / 1024).toFixed(1)} KB)`);
         try {
           const fd = new FormData();
           fd.append("file", file);
           const res  = await fetch("/api/upload", { method: "POST", body: fd });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error);
+          const data = await res.json().catch(() => ({}) as Record<string, unknown>);
+          if (!res.ok) throw new Error((data as { error?: string }).error ?? `HTTP ${res.status}`);
+          console.log("[WorkflowEditor] upload (add) concluído:", (data as { url?: string }).url?.slice(0, 60));
 
           setNodes((ns) => ns.map((n) => {
             if (n.id !== nodeId) return n;
             const d = n.data as unknown as ImageNodeData;
-            return { ...n, data: { ...d, falUrl: data.url, uploading: false, status: "ready" as NodeStatus } };
+            return { ...n, data: { ...d, falUrl: (data as { url: string }).url, uploading: false, status: "ready" as NodeStatus } };
           }));
         } catch (err) {
           const errorMessage = sanitizeError(err);
-          console.error("[upload] falha ao enviar", label, err);
+          console.error("[WorkflowEditor] upload (add) falhou:", label, err);
           setNodes((ns) => ns.map((n) => {
             if (n.id !== nodeId) return n;
             const d = n.data as unknown as ImageNodeData;

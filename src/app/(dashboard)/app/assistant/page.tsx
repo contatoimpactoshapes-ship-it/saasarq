@@ -730,8 +730,11 @@ export default function AssistantPage() {
         if (result.message) toast.info(result.message);
         applyImage(result.file);
       } catch (err) {
-        console.error("[processAndApplyFile] conversão falhou:", err);
-        toast.error("Falha ao converter o arquivo. Tente outro formato.");
+        const raw   = err instanceof Error ? err.message : String(err);
+        const label = isPdf ? "PDF" : "HEIC";
+        console.error(`[processAndApplyFile] ${label} conversão falhou:`, err);
+        // Surface the real reason so user / support can diagnose
+        toast.error(`Falha ao processar ${label}: ${raw}`, { duration: 8000 });
       } finally {
         setConverting(false);
       }
@@ -767,18 +770,35 @@ export default function AssistantPage() {
 
   async function uploadImageForWorkflow(file: File) {
     setSaveImagePending(true);
+    const toastId = toast.loading("Enviando imagem de referência…");
+    console.log(`[uploadImageForWorkflow] iniciando: "${file.name}" (${(file.size / 1024).toFixed(1)} KB)`);
+
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      if (res.ok) {
-        const data = await res.json() as { url?: string };
-        if (data.url) setStudioImageR2Url(data.url);
-      } else {
-        console.warn("[uploadImageForWorkflow] upload falhou:", res.status);
+      const res  = await fetch("/api/upload", { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}) as Record<string, unknown>) as { url?: string; error?: string };
+
+      if (!res.ok) {
+        const reason = data.error ?? `HTTP ${res.status}`;
+        console.error("[uploadImageForWorkflow] falha:", reason);
+        toast.error(`Falha ao enviar para storage: ${reason}`, { id: toastId, duration: 8000 });
+        return;
       }
+
+      if (!data.url) {
+        console.error("[uploadImageForWorkflow] resposta sem URL");
+        toast.error("Falha ao enviar para storage: URL não retornada.", { id: toastId, duration: 8000 });
+        return;
+      }
+
+      console.log("[uploadImageForWorkflow] concluído:", data.url.slice(0, 60) + "…");
+      setStudioImageR2Url(data.url);
+      toast.dismiss(toastId);
     } catch (e) {
-      console.error("[uploadImageForWorkflow]", e);
+      const msg = e instanceof Error ? e.message : "Erro de rede";
+      console.error("[uploadImageForWorkflow] exceção:", e);
+      toast.error(`Falha ao enviar imagem: ${msg}`, { id: toastId, duration: 8000 });
     } finally {
       setSaveImagePending(false);
     }
@@ -817,6 +837,8 @@ export default function AssistantPage() {
       toast.success("Análise salva.", { duration: 2000 });
     } catch (e) {
       console.error("[saveAnalysis]", e);
+      // Warn (not error) — analysis result is still usable even if save failed
+      toast.warning("Não foi possível salvar a análise no histórico.", { duration: 5000 });
     }
     // saveImagePending is managed exclusively by uploadImageForWorkflow, not here
   }

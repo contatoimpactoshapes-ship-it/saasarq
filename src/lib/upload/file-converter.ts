@@ -7,13 +7,13 @@ export type ConversionResult = {
   message?:       string;
 };
 
-const PDF_MIME  = "application/pdf";
+const PDF_MIME   = "application/pdf";
 const HEIC_MIMES = new Set(["image/heic", "image/heif"]);
 
 export function needsConversion(file: File): boolean {
   const name = file.name.toLowerCase();
   return (
-    file.type === PDF_MIME   || name.endsWith(".pdf")  ||
+    file.type === PDF_MIME    || name.endsWith(".pdf")  ||
     HEIC_MIMES.has(file.type) || name.endsWith(".heic") || name.endsWith(".heif")
   );
 }
@@ -34,27 +34,49 @@ export async function convertFileForUpload(file: File): Promise<ConversionResult
 
 // ── PDF ───────────────────────────────────────────────────────────────────────
 
-// Keep rendered PNG below Anthropic's 5 MB message limit.
-const MAX_PNG_BYTES = 4.5 * 1024 * 1024;
+const MAX_PNG_BYTES      = 4.5 * 1024 * 1024; // stay under Anthropic 5 MB limit
+const PDF_LOAD_TIMEOUT   = 20_000;             // ms — catches blocked CDN workers
 
 async function convertPdfFirstPage(file: File): Promise<ConversionResult> {
+  const kb = (file.size / 1024).toFixed(1);
+  console.log(`[file-converter] PDF: iniciando conversão de "${file.name}" (${kb} KB)`);
+
   const pdfjs = await import("pdfjs-dist");
 
   // CDN worker URL, pinned to exact installed version.
   // pdfjs v6+ uses .mjs (ES module) workers.
-  pdfjs.GlobalWorkerOptions.workerSrc =
+  // Known limitation: may be blocked on corporate networks — shows timeout error.
+  const workerSrc =
     `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+  console.log(`[file-converter] PDF: worker = ${workerSrc}`);
+  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
   const bytes       = await file.arrayBuffer();
   const loadingTask = pdfjs.getDocument({ data: new Uint8Array(bytes) });
-  const pdf         = await loadingTask.promise;
-  const page        = await pdf.getPage(1);
 
+  // Race against a timeout — catches CDN-blocked / hanging workers.
+  const pdf = await Promise.race([
+    loadingTask.promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(
+          "Tempo esgotado ao carregar PDF. " +
+          "Se estiver em rede corporativa ou VPN, o CDN pode estar bloqueado — " +
+          "converta o PDF para JPG antes de enviar."
+        )),
+        PDF_LOAD_TIMEOUT,
+      ),
+    ),
+  ]);
+
+  const page   = await pdf.getPage(1);
   const canvas = document.createElement("canvas");
   const ctx    = canvas.getContext("2d");
+
   if (!ctx) throw new Error("Canvas 2D não disponível neste navegador");
 
-  // Start at 2× scale for quality; downscale until PNG fits under limit.
+  // Start at 2× scale; downscale automatically to stay under MAX_PNG_BYTES.
   let scale = 2.0;
   let blob: Blob | null = null;
 
@@ -63,6 +85,7 @@ async function convertPdfFirstPage(file: File): Promise<ConversionResult> {
     canvas.width   = viewport.width;
     canvas.height  = viewport.height;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
     // pdfjs v6: render() requires both `canvas` and `canvasContext`
     await page.render({ canvas, canvasContext: ctx, viewport }).promise;
 
@@ -77,11 +100,14 @@ async function convertPdfFirstPage(file: File): Promise<ConversionResult> {
     scale -= 0.5;
   }
 
-  // loadingTask.destroy() releases the worker transport; pdf.cleanup() frees fonts.
+  // Release worker transport and font cache.
   await pdf.cleanup();
   await loadingTask.destroy();
 
   if (!blob) throw new Error("Não foi possível converter o PDF em imagem");
+
+  const outKb = (blob.size / 1024).toFixed(1);
+  console.log(`[file-converter] PDF: concluído — scale=${scale.toFixed(2)} saída=${outKb} KB`);
 
   const baseName  = file.name.replace(/\.pdf$/i, "");
   const converted = new File([blob], `${baseName}_p1.png`, { type: "image/png" });
@@ -96,11 +122,28 @@ async function convertPdfFirstPage(file: File): Promise<ConversionResult> {
 // ── HEIC / HEIF ───────────────────────────────────────────────────────────────
 
 async function convertHeicToJpeg(file: File): Promise<ConversionResult> {
+  const kb = (file.size / 1024).toFixed(1);
+  console.log(`[file-converter] HEIC: iniciando conversão de "${file.name}" (${kb} KB)`);
+
   const { default: heic2any } = await import("heic2any");
 
-  const result    = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
-  const blob      = Array.isArray(result) ? result[0] : result;
-  const baseName  = file.name.replace(/\.(heic|heif)$/i, "");
+  let result: Blob | Blob[];
+  try {
+    result = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Falha ao converter HEIC: ${msg}. ` +
+      "Tente abrir a imagem no app Fotos do iPhone e compartilhar como JPEG.",
+    );
+  }
+
+  const blob     = Array.isArray(result) ? result[0] : result;
+  const baseName = file.name.replace(/\.(heic|heif)$/i, "");
+  const outKb    = (blob.size / 1024).toFixed(1);
+
+  console.log(`[file-converter] HEIC: concluído — saída=${outKb} KB`);
+
   const converted = new File([blob], `${baseName}.jpg`, { type: "image/jpeg" });
 
   return {
