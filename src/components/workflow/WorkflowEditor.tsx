@@ -17,6 +17,7 @@ import "@xyflow/react/dist/style.css";
 import { toast } from "sonner";
 import { ImageIcon, Hand, MousePointer, Download } from "lucide-react";
 import { sanitizeError } from "@/lib/errors";
+import { needsConversion, convertFileForUpload } from "@/lib/upload/file-converter";
 
 import { ImageNode, ImageNodeData, NodeStatus } from "./nodes/ImageNode";
 import { ContextMenu, ContextMenuState } from "./ContextMenu";
@@ -508,8 +509,22 @@ function WorkflowEditorInner({
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const fileArray = Array.from(files);          // capture before input reset
+    const rawArray = Array.from(files);           // capture before input reset
     if (fileRef.current) fileRef.current.value = "";
+
+    // Convert PDF/HEIC → standard image client-side before any upload.
+    const fileArray: File[] = [];
+    for (const f of rawArray) {
+      if (!needsConversion(f)) { fileArray.push(f); continue; }
+      try {
+        const r = await convertFileForUpload(f);
+        if (r.message) toast.info(r.message);
+        fileArray.push(r.file);
+      } catch {
+        toast.error(`${f.name}: falha na conversão — verifique o arquivo.`);
+      }
+    }
+    if (!fileArray.length) return;
 
     // ── Replace mode: swap image in an existing source node ──────────────────
     const replaceId = replaceTargetRef.current;
@@ -1058,7 +1073,7 @@ function WorkflowEditorInner({
       {/* File input */}
       <input
         ref={fileRef}
-        type="file" accept="image/*" multiple
+        type="file" accept="image/*,application/pdf,.pdf,.heic,.heif" multiple
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />

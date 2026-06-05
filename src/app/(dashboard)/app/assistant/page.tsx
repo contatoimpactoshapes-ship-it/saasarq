@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { TopBar } from "@/components/layout/TopBar";
 import type { PromptArchitectResponse } from "@/lib/assistant/prompt-architect";
 import { detectStyle, detectMaterials, detectLighting, detectCamera, getScoreLevel } from "@/lib/assistant/intel";
+import { needsConversion, convertFileForUpload } from "@/lib/upload/file-converter";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,8 +38,12 @@ type AnalysisItem = {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+// Post-conversion accepted types (what actually gets sent to Anthropic)
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-const MAX_BYTES     = 5 * 1024 * 1024;
+
+// Input limits — PDFs may be larger; they are downscaled during conversion
+const MAX_BYTES     = 5  * 1024 * 1024;  // images
+const MAX_PDF_BYTES = 20 * 1024 * 1024;  // PDFs / HEIC before conversion
 
 const MODEL_TO_RENDER_ID: Record<string, string> = {
   "Nano Banana Pro": "render-nano-banana-pro",
@@ -630,6 +635,7 @@ export default function AssistantPage() {
   const [input,           setInput]           = useState("");
   const [projectDetails,  setProjectDetails]  = useState("");
   const [loading,         setLoading]         = useState(false);
+  const [converting,      setConverting]      = useState(false);
   const [dragOver,        setDragOver]        = useState(false);
 
   // R2 URL of the analysed image — set after saveAnalysis() persists it.
@@ -688,6 +694,7 @@ export default function AssistantPage() {
 
   // ── Image handling ───────────────────────────────────────────────────────────
 
+  // Validates and sets a (already-converted) image file as pending preview.
   const applyImage = useCallback((file: File) => {
     if (!ALLOWED_TYPES.includes(file.type)) {
       toast.error("Tipo não suportado. Use JPG, PNG, WebP ou GIF.");
@@ -702,6 +709,38 @@ export default function AssistantPage() {
     setPendingPreview(URL.createObjectURL(file));
   }, [pendingPreview]);
 
+  // Entry point for all file selections — converts PDF/HEIC before applying.
+  const processAndApplyFile = useCallback(async (file: File) => {
+    const name = file.name.toLowerCase();
+    const isPdf  = file.type === "application/pdf" || name.endsWith(".pdf");
+    const isHeic = file.type === "image/heic" || file.type === "image/heif" ||
+                   name.endsWith(".heic") || name.endsWith(".heif");
+
+    // Size guard (before conversion — originals may be larger)
+    const limit = (isPdf || isHeic) ? MAX_PDF_BYTES : MAX_BYTES;
+    if (file.size > limit) {
+      toast.error(`Arquivo muito grande. Máximo: ${isPdf || isHeic ? "20 MB" : "5 MB"}.`);
+      return;
+    }
+
+    if (needsConversion(file)) {
+      setConverting(true);
+      try {
+        const result = await convertFileForUpload(file);
+        if (result.message) toast.info(result.message);
+        applyImage(result.file);
+      } catch (err) {
+        console.error("[processAndApplyFile] conversão falhou:", err);
+        toast.error("Falha ao converter o arquivo. Tente outro formato.");
+      } finally {
+        setConverting(false);
+      }
+      return;
+    }
+
+    applyImage(file);
+  }, [applyImage]);
+
   function removePending() {
     if (pendingPreview) URL.revokeObjectURL(pendingPreview);
     setPendingImage(null);
@@ -711,14 +750,14 @@ export default function AssistantPage() {
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) applyImage(file);
+    if (file) processAndApplyFile(file);
   }
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) applyImage(file);
+    if (file) processAndApplyFile(file);
   }
 
   // ── Upload image to FAL storage for Workflow handoff ────────────────────────
@@ -914,7 +953,12 @@ export default function AssistantPage() {
           : "border-zinc-200 hover:border-zinc-400 hover:bg-zinc-50/50"}
       `}
     >
-      {pendingPreview ? (
+      {converting ? (
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className={`${compact ? "w-5 h-5" : "w-6 h-6"} text-zinc-400 animate-spin`} />
+          <p className="text-xs text-zinc-400">Convertendo…</p>
+        </div>
+      ) : pendingPreview ? (
         <div className="relative" onClick={(e) => e.stopPropagation()}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={pendingPreview} alt="Preview" className={`${compact ? "h-20" : "h-32"} w-auto rounded-lg object-cover`} />
@@ -934,7 +978,7 @@ export default function AssistantPage() {
           {!compact && (
             <>
               <p className="text-sm font-medium text-zinc-600">Envie uma referência arquitetônica</p>
-              <p className="text-xs text-zinc-400">JPG, PNG, WebP, GIF · máx 5 MB</p>
+              <p className="text-xs text-zinc-400">JPG, PNG, WebP, GIF, PDF · máx 5 MB (PDF até 20 MB)</p>
             </>
           )}
           {compact && <p className="text-xs text-zinc-400">Enviar referência</p>}
@@ -985,7 +1029,7 @@ export default function AssistantPage() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif"
+        accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,.pdf,.heic,.heif"
         className="hidden"
         onChange={onFileChange}
       />
